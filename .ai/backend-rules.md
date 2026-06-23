@@ -126,3 +126,30 @@ FTS must be used for text search.
 Follow:
 
 .ai/api-contract.md
+
+---
+
+# API Documentation
+
+All API handlers must include Swagger annotations.
+
+Use:
+
+swag init -g ./cmd/main.go -o ./docs
+
+Annotations must document:
+
+- endpoint summary and description
+- request parameters
+- response schemas
+- error codes
+
+Run:
+
+make swag
+
+to regenerate docs.
+
+Generated docs live in:
+
+backend/docs/

@@ -1,0 +1,36 @@
+# Dependencies
+backend/vendor/
+web/node_modules/
+
+# Build output
+backend/bin/
+backend/tmp/
+web/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Environment
+.env
+.env.local

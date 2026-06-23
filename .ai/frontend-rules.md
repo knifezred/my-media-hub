@@ -5,6 +5,7 @@ Stack:
 - Vue3
 - TypeScript
 - Pinia
+- pnpm (package manager)
 
 ---
 
