@@ -3,6 +3,7 @@ backend/vendor/
 web/node_modules/
 
 # Build output
+backend/data/
 backend/bin/
 backend/tmp/
 web/dist/
@@ -10,6 +11,7 @@ web/dist/
 # IDE
 .idea/
 .vscode/
+.trae/
 *.swp
 *.swo
 

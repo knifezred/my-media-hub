@@ -8,38 +8,28 @@ const stats = ref<StatsOverview | null>(null)
 onMounted(async () => {
   try {
     stats.value = await fetchStatsOverview()
-  } catch {
-    // API not ready yet
-  }
+  } catch {}
 })
+
+const statCards = [
+  { key: 'total_media' as const, label: '媒体总数', icon: '📦' },
+  { key: 'total_images' as const, label: '图片', icon: '🖼' },
+  { key: 'total_videos' as const, label: '视频', icon: '🎬' },
+  { key: 'total_novels' as const, label: '小说', icon: '📖' },
+  { key: 'favorite_count' as const, label: '收藏', icon: '♥' },
+  { key: 'viewed_count' as const, label: '已看', icon: '✓' },
+]
 </script>
 
 <template>
   <div class="stats-page">
+    <h3 class="page-title">统计概览</h3>
+
     <div v-if="stats" class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-value">{{ stats.total_media.toLocaleString() }}</div>
-        <div class="stat-label">媒体总数</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{ stats.total_images.toLocaleString() }}</div>
-        <div class="stat-label">图片</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{ stats.total_videos.toLocaleString() }}</div>
-        <div class="stat-label">视频</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{ stats.total_novels.toLocaleString() }}</div>
-        <div class="stat-label">小说</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{ stats.favorite_count.toLocaleString() }}</div>
-        <div class="stat-label">收藏</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{ stats.viewed_count.toLocaleString() }}</div>
-        <div class="stat-label">已看</div>
+      <div v-for="card in statCards" :key="card.key" class="stat-card">
+        <div class="stat-icon">{{ card.icon }}</div>
+        <div class="stat-value">{{ stats[card.key].toLocaleString() }}</div>
+        <div class="stat-label">{{ card.label }}</div>
       </div>
     </div>
 
@@ -55,6 +45,12 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -66,13 +62,24 @@ onMounted(async () => {
   border: 1px solid var(--border);
   border-radius: 12px;
   text-align: center;
+  background: var(--bg-hover);
+  transition: border-color 0.2s;
+}
+
+.stat-card:hover {
+  border-color: var(--accent);
+}
+
+.stat-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
 }
 
 .stat-value {
   font-size: 28px;
   font-weight: 700;
   color: var(--accent);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .stat-label {

@@ -6,6 +6,7 @@ import (
 	"my-media-hub/backend/internal/config"
 	"my-media-hub/backend/internal/database"
 	"my-media-hub/backend/internal/router"
+	"my-media-hub/backend/internal/search"
 )
 
 func main() {
@@ -16,7 +17,9 @@ func main() {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
 
-	r := router.Setup(db)
+	idx := search.NewIndex(db)
+
+	r := router.Setup(db, idx)
 
 	log.Printf("server starting on %s", cfg.Addr)
 	if err := r.Run(cfg.Addr); err != nil {

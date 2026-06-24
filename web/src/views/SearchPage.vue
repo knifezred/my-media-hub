@@ -1,19 +1,43 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useSearchStore } from '../stores/search'
+import Pagination from '../components/Pagination.vue'
 
 const store = useSearchStore()
+const route = useRoute()
 const keyword = ref('')
 const mediaType = ref('')
+const currentPage = ref(1)
+const pageSize = 20
 
 function doSearch() {
   if (!keyword.value.trim()) return
-  store.search({ keyword: keyword.value, media_type: mediaType.value || undefined })
+  currentPage.value = 1
+  store.search({ keyword: keyword.value, media_type: mediaType.value || undefined, page: currentPage.value, page_size: pageSize })
+}
+
+function onPageChange(p: number) {
+  currentPage.value = p
+  store.search({ keyword: keyword.value, media_type: mediaType.value || undefined, page: currentPage.value, page_size: pageSize })
 }
 
 function onInput() {
   store.fetchSuggestions(keyword.value)
 }
+
+function applySuggestion(s: string) {
+  keyword.value = s
+  doSearch()
+}
+
+onMounted(() => {
+  const q = route.query.q as string
+  if (q) {
+    keyword.value = q
+    doSearch()
+  }
+})
 </script>
 
 <template>
@@ -35,7 +59,7 @@ function onInput() {
         v-for="s in store.suggestions"
         :key="s"
         class="suggestion-item"
-        @click="keyword = s; doSearch()"
+        @click="applySuggestion(s)"
       >
         {{ s }}
       </div>
@@ -54,12 +78,24 @@ function onInput() {
 
     <div v-else-if="store.results.length" class="results">
       <div v-for="item in store.results" :key="item.id" class="result-item">
-        <router-link :to="`/media/${item.id}`" class="result-title">{{ item.title }}</router-link>
-        <div class="result-meta">
-          <span class="type-badge">{{ item.media_type }}</span>
-          <span>{{ item.tags.map(t => t.name).join(', ') }}</span>
+        <div class="result-cover">
+          <span class="result-icon">{{ item.media_type === 'video' ? '🎬' : item.media_type === 'image' ? '🖼' : '📖' }}</span>
+        </div>
+        <div class="result-body">
+          <router-link :to="`/media/${item.id}`" class="result-title">{{ item.title }}</router-link>
+          <div class="result-meta">
+            <span class="type-badge">{{ item.media_type }}</span>
+            <span v-if="item.tags?.length">{{ item.tags.map(t => t.name).join(', ') }}</span>
+          </div>
         </div>
       </div>
+      <Pagination
+        v-if="store.total > pageSize"
+        :page="currentPage"
+        :page-size="pageSize"
+        :total="store.total"
+        @change="onPageChange"
+      />
       <div class="result-info">共 {{ store.total }} 条结果</div>
     </div>
 
@@ -110,6 +146,10 @@ function onInput() {
   cursor: pointer;
 }
 
+.search-btn:hover {
+  opacity: 0.9;
+}
+
 .suggestions {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -146,9 +186,33 @@ function onInput() {
 }
 
 .result-item {
+  display: flex;
+  gap: 16px;
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+.result-item:hover {
+  border-color: var(--accent);
+}
+
+.result-cover {
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.result-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .result-title {
@@ -156,6 +220,8 @@ function onInput() {
   font-weight: 500;
   color: var(--accent);
   text-decoration: none;
+  display: block;
+  margin-bottom: 6px;
 }
 
 .result-title:hover {
@@ -165,7 +231,6 @@ function onInput() {
 .result-meta {
   display: flex;
   gap: 12px;
-  margin-top: 8px;
   font-size: 13px;
   color: var(--text-secondary);
 }
@@ -175,6 +240,7 @@ function onInput() {
   border-radius: 4px;
   background: var(--bg-hover);
   font-size: 12px;
+  text-transform: uppercase;
 }
 
 .result-info {

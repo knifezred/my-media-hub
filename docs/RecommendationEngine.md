@@ -1,28 +1,30 @@
-# Recommendation Engine - 推荐引擎设计文档
+# My Media Hub - 推荐引擎设计文档
 
-# My Media Hub
-
-版本：1.0
+版本：2.0
 
 状态：Draft
+
+最后更新：2026-06
 
 ---
 
 # 一、设计目标
 
-My Media Hub 的目标不是帮助用户管理资源。
+My Media Hub 的核心目标不是管理媒体资源。
 
-而是帮助用户持续发现资源。
+而是帮助用户持续发现值得消费的内容。
 
-推荐系统需要解决的问题：
+因此推荐引擎是整个系统的核心能力。
 
-* 收藏越来越多
-* 消费越来越少
-* 不知道看什么
-* 遗忘已有资源
-* 重复下载相同资源
+---
 
-推荐引擎应成为系统核心能力。
+推荐引擎负责：
+
+* 内容发现
+* 兴趣挖掘
+* 资源再利用
+* 个性化推荐
+* 首页发现流生成
 
 ---
 
@@ -30,513 +32,325 @@ My Media Hub 的目标不是帮助用户管理资源。
 
 ## Discovery First
 
-发现优先。
+推荐系统服务于发现。
 
-推荐系统不是帮助用户找到已知内容。
+目标：
 
-而是帮助用户发现未知内容。
-
----
-
-## Personal First
-
-优先使用用户自身资源。
-
-不依赖外部内容源。
+让用户无需搜索即可发现内容。
 
 ---
 
-## Lightweight First
+## Behavior Driven
 
-必须适配：
+用户行为是唯一可信数据来源。
 
-* Intel N100
-* 8GB RAM
+包括：
 
-不依赖：
+* 收藏
+* 评分
+* 浏览
+* 点击
+* 已看
+* 不感兴趣
+* 搜索
 
-* GPU
+---
+
+## Recommendation First
+
+推荐优先于搜索。
+
+搜索属于辅助能力。
+
+---
+
+## Simple First
+
+优先使用：
+
+* 规则推荐
+* 权重推荐
+* 标签推荐
+
+避免过早引入：
+
+* AI模型
 * 向量数据库
-* 大模型
+* LLM推荐
 
 ---
 
-## Explainable First
-
-推荐结果应尽可能可解释。
-
-例如：
+# 三、推荐系统总体架构
 
 ```text
-因为你收藏过：
-《三体》
-
-所以推荐：
-
-《球状闪电》
+Media
+↓
+User Behavior
+↓
+Interest Profile
+↓
+Candidate Generator
+↓
+Strategy Executor
+↓
+Score Calculator
+↓
+Recommendation Result
+↓
+Discovery Feed
 ```
 
 ---
 
-# 三、推荐架构
+# 四、推荐流程
 
-采用：
+## Step1
 
-多策略混合推荐架构
+候选集生成
+
+Candidate Generation
+
+从多个策略产生候选内容。
 
 ---
 
+## Step2
+
+策略评分
+
+Strategy Scoring
+
+不同推荐策略独立计算分数。
+
+---
+
+## Step3
+
+统一排序
+
+Ranking
+
+统一转换为推荐分数。
+
+---
+
+## Step4
+
+结果输出
+
+Recommendation Result
+
+返回推荐内容列表。
+
+---
+
+# 五、用户行为体系
+
+推荐引擎的数据来源：
+
+## 收藏
+
+behavior_type
+
 ```text
-             Recommendation Service
+favorite
+```
 
-                       │
+权重：
 
-     ┌─────────────────┼─────────────────┐
-
-     ▼                 ▼                 ▼
-
- Content          Behavior         Discovery
-
-     ▼                 ▼                 ▼
-
- Tag            Favorite         Random
-
- Category       Rating           Rediscover
-
- Similar        Viewed           Recent
-
- Metadata       Search
+```text
++5
 ```
 
 ---
 
-最终统一输出：
+## 评分
 
-Recommendation Feed
+```text
+rating
+```
+
+权重：
+
+```text
+1~5
+```
 
 ---
 
-# 四、推荐类型
+## 浏览
+
+```text
+view
+```
+
+权重：
+
+```text
++1
+```
+
+---
+
+## 点击
+
+```text
+click
+```
+
+权重：
+
+```text
++1
+```
+
+---
+
+## 不感兴趣
+
+```text
+hidden
+```
+
+权重：
+
+```text
+-5
+```
+
+---
+
+## 搜索点击
+
+```text
+search_click
+```
+
+权重：
+
+```text
++2
+```
+
+---
+
+# 六、兴趣画像
+
+兴趣画像来源：
+
+```text
+Behavior
++
+Tag
++
+Category
+```
+
+---
+
+示例：
+
+```text
+科幻      120
+
+推理      80
+
+动漫      60
+
+摄影      30
+```
+
+---
+
+数据来源：
+
+interest_profile
+
+---
+
+更新方式：
+
+异步聚合。
+
+---
+
+# 七、推荐策略体系
+
+推荐采用：
+
+多策略混合推荐。
+
+---
+
+# V1 推荐策略
 
 ## Random
 
 随机推荐
 
+目标：
+
+探索未知内容。
+
 ---
+
+## Recent
+
+最近新增
 
 目标：
 
-帮助用户发现被忽略内容。
+优先发现新资源。
 
 ---
 
-特点：
-
-* 完全随机
-* 去重
-* 排除已隐藏
-
----
-
-适用：
-
-首页发现
-
-今日推荐
-
----
-
-# 五、Recent
-
-最近新增推荐
-
----
-
-目标：
-
-让用户快速消费新资源。
-
----
-
-排序：
-
-```text
-created_at DESC
-```
-
----
-
-支持：
-
-图片
-
-视频
-
-小说
-
----
-
-# 六、Favorite
+## Favorite Based
 
 收藏驱动推荐
 
----
+目标：
 
-数据来源：
-
-user_favorite
+推荐与收藏资源相似内容。
 
 ---
 
-逻辑：
+## Tag Based
 
-分析用户收藏资源。
+标签推荐
 
-提取：
+目标：
+
+推荐相同标签资源。
+
+---
+
+## Category Based
+
+分类推荐
+
+目标：
+
+推荐相同分类资源。
+
+---
+
+# V2 推荐策略
+
+## Similar Media
+
+相似资源推荐
+
+依据：
 
 * 标签
 * 分类
 * 元数据
 
-寻找相似资源。
-
 ---
 
-示例：
+## Rediscover
 
-```text
-收藏：
-
-科幻小说
-
-↓
-
-推荐：
-
-更多科幻小说
-```
-
----
-
-# 七、Rating
-
-评分驱动推荐
-
----
-
-数据来源：
-
-user_rating
-
----
-
-评分权重：
-
-```text
-5分 = 100
-
-4分 = 70
-
-3分 = 40
-
-2分 = 10
-
-1分 = -50
-```
-
----
-
-高评分：
-
-增加兴趣权重。
-
-低评分：
-
-降低兴趣权重。
-
----
-
-# 八、Viewed
-
-观看驱动推荐
-
----
-
-数据来源：
-
-user_viewed
-
----
-
-目的：
-
-识别真实消费行为。
-
----
-
-权重：
-
-低于收藏。
-
-高于搜索。
-
----
-
-# 九、Search
-
-搜索驱动推荐
-
----
-
-数据来源：
-
-search_history
-
-search_click_history
-
----
-
-目标：
-
-识别用户当前兴趣。
-
----
-
-示例：
-
-```text
-最近搜索：
-
-AI
-机器学习
-大模型
-
-↓
-
-增加相关资源推荐
-```
-
----
-
-# 十、Tag Recommendation
-
-标签推荐
-
----
-
-推荐核心之一。
-
----
-
-计算方式：
-
-统计：
-
-用户互动最多的标签。
-
----
-
-行为包括：
-
-收藏
-
-评分
-
-观看
-
-搜索
-
----
-
-形成：
-
-Tag Interest Profile
-
----
-
-示例：
-
-```text
-科幻
-
-AI
-
-历史
-
-编程
-```
-
----
-
-# 十一、Category Recommendation
-
-分类推荐
-
----
-
-与标签类似。
-
----
-
-粒度更粗。
-
----
-
-示例：
-
-```text
-小说
-
-影视
-
-图片
-```
-
----
-
-# 十二、Metadata Recommendation
-
-元数据推荐
-
----
-
-基于：
-
-作者
-
-导演
-
-演员
-
-出版社
-
-摄影设备
-
-系列名称
-
-等字段。
-
----
-
-示例：
-
-```text
-东野圭吾
-
-↓
-
-更多东野圭吾作品
-```
-
----
-
-# 十三、Similar Recommendation
-
-相似资源推荐
-
----
-
-用于：
-
-资源详情页。
-
----
-
-输入：
-
-Media A
-
----
-
-输出：
-
-与 Media A 相似的资源。
-
----
-
-# 十四、相似度计算
-
-## Tag Similarity
-
-权重：
-
-40%
-
----
-
-计算：
-
-共同标签数量。
-
----
-
-## Category Similarity
-
-权重：
-
-20%
-
----
-
-计算：
-
-共同分类。
-
----
-
-## Metadata Similarity
-
-权重：
-
-20%
-
----
-
-计算：
-
-作者
-
-导演
-
-系列
-
-等字段。
-
----
-
-## Behavior Similarity
-
-权重：
-
-20%
-
----
-
-计算：
-
-用户行为聚合。
-
----
-
-最终：
-
-```text
-Similarity Score
-
-0 ~ 100
-```
-
----
-
-# 十五、Rediscover
-
-重新发现推荐
-
----
-
-My Media Hub 核心特色。
-
----
+重新发现
 
 目标：
 
@@ -544,283 +358,373 @@ My Media Hub 核心特色。
 
 ---
 
-条件：
+规则：
 
-超过90天未访问。
-
----
-
-优先推荐：
+长期未访问
 
 高评分
 
 高收藏
 
-高价值内容。
-
 ---
-
-示例：
-
-```text
-你已经180天没看过：
-
-《银河帝国》
-
-重新看看？
-```
-
----
-
-# 十六、兴趣画像
 
 ## Interest Profile
 
-系统自动维护。
+兴趣画像推荐
+
+根据用户兴趣分布推荐。
 
 ---
 
-结构：
+# V3 推荐策略
 
-```text
-Tag Score
+## Cross Media
 
-Category Score
-
-Author Score
-
-Media Type Score
-```
-
----
+跨媒体推荐
 
 示例：
 
-```json
-{
-  "science_fiction": 120,
-  "ai": 95,
-  "history": 60
-}
+```text
+小说
+↓
+影视改编
+
+影视
+↓
+原著小说
 ```
 
 ---
 
-# 十七、推荐评分模型
+## AI Discovery
 
-推荐分数：
+AI推荐
+
+基于：
+
+* LLM
+* Embedding
+* Semantic Analysis
+
+---
+
+# 八、候选集生成
+
+Candidate Generator
+
+负责：
+
+生成候选内容。
+
+---
+
+候选来源：
+
+```text
+Random
+
+Recent
+
+Favorite
+
+Tag
+
+Category
+
+Similar
+```
+
+---
+
+输出：
+
+```text
+Candidate List
+```
+
+---
+
+# 九、评分体系
+
+统一评分公式：
 
 ```text
 Final Score
 
 =
-Interest Score
 
-+
 Behavior Score
 
 +
+
+Tag Score
+
++
+
+Category Score
+
++
+
 Freshness Score
 
 +
-Diversity Score
+
+Random Score
 ```
-
----
-
-## Interest Score
-
-兴趣匹配度。
-
----
-
-## Behavior Score
-
-收藏
-
-评分
-
-观看
-
-搜索
-
-综合计算。
-
----
-
-## Freshness Score
-
-鼓励新内容。
-
-避免总推荐旧内容。
-
----
-
-## Diversity Score
-
-鼓励多样性。
-
-避免推荐结果完全相同。
-
----
-
-# 十八、冷启动
-
-新用户：
-
-无行为数据。
-
----
-
-策略：
-
-Recent
-
-*
-
-Random
-
-*
-
-Popular Tags
-
----
-
-新资源：
-
-无行为数据。
-
----
-
-策略：
-
-Tag
-
-*
-
-Metadata
-
-推荐。
-
----
-
-# 十九、推荐结果去重
-
-必须避免：
-
-连续推荐相同内容。
-
----
-
-规则：
-
-最近推荐7天内：
-
-降低权重。
-
----
-
-已隐藏资源：
-
-永不推荐。
-
----
-
-# 二十、性能设计
-
-目标：
-
-推荐响应：
-
-<100ms
-
----
-
-首页推荐：
-
-<50ms
-
----
-
-支持：
-
-300万图片
-
-300万小说
-
-20万视频
-
----
-
-推荐结果应优先从：
-
-recommendation_cache
-
-读取。
-
----
-
-复杂计算采用：
-
-异步任务预生成。
-
----
-
-# 二十一、未来规划
-
-## V2
-
-兴趣画像增强
-
-推荐反馈闭环
-
-推荐解释
-
-推荐质量评估
-
----
-
-## V3
-
-Embedding
-
-语义推荐
-
-跨媒体推荐
 
 ---
 
 示例：
 
 ```text
-喜欢：
+Favorite Score     50
 
-《三体》
+Tag Score          20
 
-↓
+Category Score     15
 
-推荐：
+Freshness Score    10
 
-宇宙主题纪录片
+Random Score        5
 
-NASA图片集
-
-相关科幻小说
+Final Score        100
 ```
 
 ---
 
-# 二十二、最终目标
+# 十、推荐结果缓存
+
+表：
+
+recommendation_cache
+
+---
+
+缓存内容：
+
+```text
+strategy_name
+
+media_id
+
+score
+```
+
+---
+
+缓存时间：
+
+默认：
+
+```text
+30分钟
+```
+
+---
+
+更新方式：
+
+异步任务。
+
+---
+
+# 十一、发现流生成
+
+推荐系统最终输出：
+
+Discovery Feed
+
+---
+
+发现流组成：
+
+## 今日推荐
+
+Daily
+
+---
+
+## 猜你喜欢
+
+Guess Like
+
+---
+
+## 最近新增
+
+Recent
+
+---
+
+## 随机探索
+
+Explore
+
+---
+
+## 重新发现
+
+Rediscover
+
+---
+
+统一输出：
+
+```text
+Discovery Feed
+```
+
+---
+
+# 十二、防重复推荐机制
+
+记录：
+
+discovery_feed_log
+
+---
+
+避免：
+
+```text
+连续多天推荐同一资源
+```
+
+---
+
+规则：
+
+最近7天推荐过：
+
+降低权重。
+
+最近30天频繁推荐：
+
+直接过滤。
+
+---
+
+# 十三、异步任务
+
+推荐相关任务：
+
+## Interest Profile Rebuild
+
+兴趣画像重建
+
+---
+
+## Recommendation Rebuild
+
+推荐结果重建
+
+---
+
+## Rediscover Calculation
+
+沉睡资源计算
+
+---
+
+## Recommendation Cache Refresh
+
+缓存刷新
+
+---
+
+# 十四、性能目标
+
+目标硬件：
+
+```text
+Intel N100
+8GB RAM
+```
+
+---
+
+首页推荐：
+
+```text
+<100ms
+```
+
+---
+
+发现流生成：
+
+```text
+<100ms
+```
+
+---
+
+兴趣画像重建：
+
+```text
+<5分钟
+```
+
+---
+
+推荐缓存刷新：
+
+```text
+<1分钟
+```
+
+---
+
+# 十五、未来演进路线
+
+V1
+
+规则推荐
+
+---
+
+V2
+
+兴趣画像
+
+---
+
+V3
+
+跨媒体推荐
+
+---
+
+V4
+
+语义推荐
+
+---
+
+V5
+
+AI Discovery
+
+---
+
+# 十六、最终目标
 
 用户打开 My Media Hub 后：
 
-不需要搜索。
+无需搜索。
+
+无需筛选。
+
+无需记忆资源位置。
 
 系统主动帮助用户发现：
 
-* 新资源
-* 被遗忘资源
-* 感兴趣资源
-* 高价值资源
+```text
+已经拥有
 
-让 NAS 从存储中心升级为内容发现中心。
+却被遗忘
+
+但值得消费的内容
+```
+
+让 NAS 从资源仓库演进为个人内容发现平台。

@@ -6,6 +6,10 @@ export interface Media {
   path: string
   cover_path: string
   size: number
+  favorite_count: number
+  view_count: number
+  rating_count: number
+  avg_rating: number
   favorite: boolean
   rating: number
   viewed: boolean
@@ -54,6 +58,13 @@ export interface StatsOverview {
   viewed_count: number
 }
 
+export interface BehaviorStatistics {
+  favorite_count: number
+  view_count: number
+  rating_count: number
+  hidden_count: number
+}
+
 export interface ScannerStatus {
   running: boolean
   processed: number
@@ -85,4 +96,11 @@ export interface FavoritePageParams {
   page?: number
   page_size?: number
   media_type?: string
+}
+
+export interface SearchHistory {
+  id: number
+  keyword: string
+  result_count: number
+  created_at: string
 }

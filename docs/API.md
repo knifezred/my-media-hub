@@ -2,41 +2,77 @@
 
 # My Media Hub
 
-版本：1.0
+版本：2.0
 
 状态：Draft
 
-API 风格：
+协议：
 
-RESTful API
+HTTP RESTful API
 
 数据格式：
 
 JSON
 
+统一前缀：
+
+```http
+/api/v1
+```
+
 ---
 
 # 一、设计原则
 
-## 稳定优先
+## Discovery First
 
-API 一旦发布：
+首页入口必须围绕 Discovery Feed 设计。
 
-* 不删除字段
-* 不重命名字段
-* 不修改字段含义
-
-优先新增字段。
+禁止以媒体列表作为首页核心接口。
 
 ---
 
-## 统一响应格式
+## Recommendation First
 
-所有 API 响应必须使用统一的 `code` / `message` / `data` 包装。
+推荐接口属于核心接口。
 
-`code` 为 `0` 表示成功，非 `0` 表示错误码。
+优先级高于搜索接口。
 
-成功响应：
+---
+
+## Behavior Driven
+
+所有推荐能力来源于用户行为。
+
+行为数据必须完整记录。
+
+---
+
+## API First
+
+前后端通过 API Contract 解耦。
+
+禁止前端依赖数据库结构。
+
+---
+
+## Backward Compatibility
+
+已发布 API：
+
+* 不删除字段
+* 不修改字段含义
+* 不修改字段类型
+
+允许：
+
+* 新增字段
+
+---
+
+# 二、统一响应格式
+
+成功：
 
 ```json
 {
@@ -46,7 +82,7 @@ API 一旦发布：
 }
 ```
 
-失败响应：
+失败：
 
 ```json
 {
@@ -58,7 +94,7 @@ API 一旦发布：
 
 ---
 
-## 分页统一格式
+# 三、分页响应格式
 
 ```json
 {
@@ -75,221 +111,336 @@ API 一旦发布：
 
 ---
 
-## 数组规范
+# 四、JSON规范
+
+禁止：
+
+```go
+json:",omitempty"
+```
+
+必须返回稳定字段。
+
+---
+
+数组：
+
+```json
+[]
+```
 
 禁止：
 
 ```json
-{
-  "items": null
-}
+null
 ```
 
-必须：
+---
+
+对象：
 
 ```json
-{
-  "items": []
-}
+{}
 ```
 
----
-
-## JSON规范
-
-禁止：
-
-omitempty
-
-必须返回稳定字段结构。
+禁止缺失字段。
 
 ---
 
-# 二、错误码规划
+# 五、错误码规范
 
-## 编码规则
-
-错误码为数字，按模块划分范围。
-
-| 范围 | 分类 |
-|------|------|
-| 0 | 成功 |
-| 10001-19999 | 媒体错误 |
-| 20001-29999 | 用户行为错误 |
-| 30001-39999 | 搜索错误 |
-| 40001-49999 | 请求错误 |
-| 50001-59999 | 扫描错误 |
-| 90001-99999 | 系统错误 |
+| 范围          | 模块             |
+| ----------- | -------------- |
+| 0           | Success        |
+| 10001~19999 | Media          |
+| 20001~29999 | Behavior       |
+| 30001~39999 | Recommendation |
+| 40001~49999 | Search         |
+| 50001~59999 | Scanner        |
+| 90001~99999 | System         |
 
 ---
 
-## 已注册错误码
-
-| Code | Name | Description |
-|------|------|-------------|
-| 0 | SUCCESS | 成功 |
-| 10001 | MEDIA_NOT_FOUND | 媒体资源不存在 |
-| 10002 | MEDIA_TYPE_INVALID | 无效的媒体类型 |
-| 10003 | MEDIA_ALREADY_EXISTS | 媒体哈希已存在 |
-| 20001 | FAVORITE_ALREADY_EXISTS | 已收藏 |
-| 20002 | FAVORITE_NOT_FOUND | 收藏不存在 |
-| 20003 | RATING_INVALID | 评分超出范围 |
-| 20004 | RATING_NOT_FOUND | 评分不存在 |
-| 20005 | MEDIA_ALREADY_HIDDEN | 已隐藏 |
-| 20006 | HIDDEN_NOT_FOUND | 隐藏记录不存在 |
-| 30001 | SEARCH_KEYWORD_EMPTY | 搜索关键词不能为空 |
-| 40001 | VALIDATION_ERROR | 请求校验失败 |
-| 40002 | PARAMETER_INVALID | 请求参数错误 |
-| 50001 | SCAN_IN_PROGRESS | 扫描正在进行中 |
-| 50002 | SCAN_NOT_RUNNING | 当前没有扫描任务 |
-| 90001 | INTERNAL_ERROR | 服务器内部错误 |
-
-新增错误码时请在此表登记，遵循模块范围分配。
-
----
-
-# 三、媒体模型
-
-## Media
+# 六、媒体模型
 
 ```json
 {
   "id": 1,
   "media_type": "video",
-  "title": "示例资源",
+  "title": "",
   "description": "",
   "path": "",
   "cover_path": "",
   "size": 0,
-  "favorite": false,
-  "rating": 0,
-  "viewed": false,
-  "hidden": false,
+
+  "favorite_count": 0,
+  "view_count": 0,
+  "rating_count": 0,
+  "avg_rating": 0,
+
   "tags": [],
   "categories": [],
-  "created_at": "2026-01-01T00:00:00Z",
-  "updated_at": "2026-01-01T00:00:00Z"
+
+  "created_at": "",
+  "updated_at": ""
 }
 ```
 
 ---
 
-# 四、媒体接口
+# 七、Discovery API（核心）
 
-## 获取媒体列表
+首页发现流。
 
-POST
+---
+
+## 获取发现流
 
 ```http
-/api/v1/media/page
+GET /api/v1/discovery/feed
 ```
 
----
-
-### Request Body
-
-| 参数          | 类型     |
-| ----------- | ------ |
-| page        | int    |
-| page_size   | int    |
-| media_type  | string |
-| category_id | int    |
-| tag_id      | int    |
-| sort        | string |
-
----
-
-### Response
+Response：
 
 ```json
 {
   "code": 0,
   "message": "success",
   "data": {
-    "items": [],
-    "total": 0,
-    "page": 1,
-    "page_size": 20
+    "daily": [],
+    "guess_like": [],
+    "recent": [],
+    "rediscover": [],
+    "explore": []
   }
 }
+```
+
+---
+
+## 今日推荐
+
+```http
+GET /api/v1/discovery/daily
+```
+
+---
+
+## 猜你喜欢
+
+```http
+GET /api/v1/discovery/guess-like
+```
+
+---
+
+## 最近新增
+
+```http
+GET /api/v1/discovery/recent
+```
+
+---
+
+## 重新发现
+
+```http
+GET /api/v1/discovery/rediscover
+```
+
+---
+
+## 随机探索
+
+```http
+GET /api/v1/discovery/explore
+```
+
+---
+
+# 八、Recommendation API（核心）
+
+---
+
+## 获取媒体推荐
+
+```http
+GET /api/v1/recommendation/media/{id}
+```
+
+---
+
+## 随机推荐
+
+```http
+GET /api/v1/recommendation/random
+```
+
+---
+
+## 标签推荐
+
+```http
+GET /api/v1/recommendation/tag
+```
+
+---
+
+## 分类推荐
+
+```http
+GET /api/v1/recommendation/category
+```
+
+---
+
+## 相似推荐
+
+```http
+GET /api/v1/recommendation/similar/{media_id}
+```
+
+---
+
+## 推荐状态
+
+```http
+GET /api/v1/recommendation/status
+```
+
+---
+
+## 重建推荐缓存
+
+```http
+POST /api/v1/recommendation/rebuild
+```
+
+---
+
+# 九、Behavior API（核心）
+
+统一行为接口。
+
+对应：
+
+user_behavior
+
+---
+
+## 记录行为
+
+```http
+POST /api/v1/behavior
+```
+
+Request：
+
+```json
+{
+  "media_id": 1,
+  "behavior_type": "favorite",
+  "score": 5
+}
+```
+
+---
+
+behavior_type：
+
+```text
+favorite
+rating
+view
+click
+hidden
+search_click
+```
+
+---
+
+## 获取行为统计
+
+```http
+GET /api/v1/behavior/statistics
+```
+
+---
+
+## 获取最近行为
+
+```http
+GET /api/v1/behavior/recent
+```
+
+---
+
+# 十、Media API
+
+媒体管理能力。
+
+---
+
+## 获取媒体列表
+
+```http
+POST /api/v1/media/page
 ```
 
 ---
 
 ## 获取媒体详情
 
-GET
-
 ```http
-/api/v1/media/{id}
+GET /api/v1/media/{id}
 ```
 
 ---
 
-### Response
+## 更新标签
+
+```http
+PUT /api/v1/media/{id}/tags
+```
+
+---
+
+## 更新分类
+
+```http
+PUT /api/v1/media/{id}/categories
+```
+
+---
+
+## 获取媒体元数据
+
+```http
+GET /api/v1/media/{id}/metadata
+```
+
+---
+
+# 十一、Search API
+
+搜索属于辅助能力。
+
+---
+
+## 搜索
+
+```http
+POST /api/v1/search/page
+```
+
+Request：
 
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": {
-    "id": 1,
-    "media_type": "video",
-    "title": "",
-    "description": "",
-    "path": "",
-    "cover_path": "",
-    "size": 0,
-    "favorite": false,
-    "rating": 0,
-    "viewed": false,
-    "hidden": false,
-    "tags": [],
-    "categories": [],
-    "metadata": {},
-    "created_at": "",
-    "updated_at": ""
-  }
-}
-```
-
----
-
-# 五、搜索接口
-
-## 全文搜索
-
-POST
-
-```http
-/api/v1/search/page
-```
-
----
-
-### Request Body
-
-| 参数         | 类型     |
-| ---------- | ------ |
-| keyword    | string |
-| media_type | string |
-| page       | int    |
-| page_size  | int    |
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": [],
-    "total": 0,
-    "page": 1,
-    "page_size": 20
-  }
+  "keyword": "",
+  "media_type": "",
+  "page": 1,
+  "page_size": 20
 }
 ```
 
@@ -297,635 +448,135 @@ POST
 
 ## 搜索建议
 
-GET
-
 ```http
-/api/v1/search/suggestions
+GET /api/v1/search/suggestions
 ```
 
 ---
-
-### Query
-
-```text
-keyword
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": [
-      "三体",
-      "流浪地球"
-    ]
-  }
-}
-```
-
----
-
-# 六、标签接口
-
-## 标签列表
-
-POST
-
-```http
-/api/v1/tags/page
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
-
----
-
-## 标签详情
-
-GET
-
-```http
-/api/v1/tags/{id}
-```
-
----
-
-# 七、分类接口
-
-## 分类列表
-
-POST
-
-```http
-/api/v1/categories/page
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
-
----
-
-# 八、收藏接口
-
-## 收藏资源
-
-POST
-
-```http
-/api/v1/favorites
-```
-
----
-
-### Request
-
-```json
-{
-  "media_id": 1
-}
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
----
-
-## 取消收藏
-
-DELETE
-
-```http
-/api/v1/favorites/{media_id}
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
----
-
-## 收藏列表
-
-POST
-
-```http
-/api/v1/favorites/page
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": [],
-    "total": 0,
-    "page": 1,
-    "page_size": 20
-  }
-}
-```
-
----
-
-# 九、评分接口
-
-## 评分
-
-POST
-
-```http
-/api/v1/ratings
-```
-
----
-
-### Request
-
-```json
-{
-  "media_id": 1,
-  "rating": 5
-}
-```
-
----
-
-### rating
-
-范围：
-
-```text
-1~5
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
----
-
-# 十、已看接口
-
-## 标记已看
-
-POST
-
-```http
-/api/v1/viewed
-```
-
----
-
-### Request
-
-```json
-{
-  "media_id": 1
-}
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
----
-
-## 已看列表
-
-POST
-
-```http
-/api/v1/viewed/page
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
-
----
-
-# 十一、不感兴趣接口
-
-## 标记隐藏
-
-POST
-
-```http
-/api/v1/hidden
-```
-
----
-
-### Request
-
-```json
-{
-  "media_id": 1
-}
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
----
-
-## 取消隐藏
-
-DELETE
-
-```http
-/api/v1/hidden/{media_id}
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
----
-
-# 十二、搜索历史接口
 
 ## 搜索历史
 
-POST
-
 ```http
-/api/v1/search/history/page
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
+POST /api/v1/search/history/page
 ```
 
 ---
 
 ## 删除搜索历史
 
-DELETE
-
 ```http
-/api/v1/search/history/{id}
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
+DELETE /api/v1/search/history/{id}
 ```
 
 ---
 
 ## 清空搜索历史
 
-DELETE
+```http
+DELETE /api/v1/search/history
+```
+
+---
+
+# 十二、Tag API
+
+---
+
+## 标签列表
 
 ```http
-/api/v1/search/history
+POST /api/v1/tags/page
 ```
 
 ---
 
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
----
-
-# 十三、推荐接口
-
-## 首页推荐
-
-POST
+## 标签详情
 
 ```http
-/api/v1/recommendations/home/page
+GET /api/v1/tags/{id}
 ```
 
 ---
 
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
+# 十三、Category API
 
 ---
 
-## 随机推荐
-
-POST
+## 分类列表
 
 ```http
-/api/v1/recommendations/random/page
+POST /api/v1/categories/page
 ```
 
 ---
 
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
-
----
-
-## 最近新增
-
-POST
+## 分类详情
 
 ```http
-/api/v1/recommendations/recent/page
+GET /api/v1/categories/{id}
 ```
 
 ---
 
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
+# 十四、Scanner API
 
 ---
-
-## 相似推荐
-
-POST
-
-```http
-/api/v1/recommendations/similar/{media_id}/page
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
-
----
-
-## 标签推荐
-
-POST
-
-```http
-/api/v1/recommendations/tag/page
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
-
----
-
-## 分类推荐
-
-POST
-
-```http
-/api/v1/recommendations/category/page
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": []
-  }
-}
-```
-
----
-
-# 十四、统计接口
-
-## 总览统计
-
-GET
-
-```http
-/api/v1/stats/overview
-```
-
----
-
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "total_media": 0,
-    "total_images": 0,
-    "total_videos": 0,
-    "total_novels": 0,
-    "favorite_count": 0,
-    "viewed_count": 0
-  }
-}
-```
-
----
-
-# 十五、扫描接口
 
 ## 启动扫描
 
-POST
+```http
+POST /api/v1/scanner/start
+```
+
+---
+
+## 停止扫描
 
 ```http
-/api/v1/scanner/start
+POST /api/v1/scanner/stop
 ```
 
 ---
 
-### Response
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
----
-
-## 获取扫描状态
-
-GET
+## 扫描状态
 
 ```http
-/api/v1/scanner/status
+GET /api/v1/scanner/status
 ```
 
 ---
 
-### Response
+# 十五、System API
+
+---
+
+## 系统信息
+
+```http
+GET /api/v1/system/info
+```
+
+---
+
+## 系统统计
+
+```http
+GET /api/v1/system/statistics
+```
+
+Response：
 
 ```json
 {
   "code": 0,
   "message": "success",
   "data": {
-    "running": false,
-    "processed": 0,
-    "total": 0,
-    "progress": 0
+    "media_count": 0,
+    "image_count": 0,
+    "video_count": 0,
+    "novel_count": 0,
+    "favorite_count": 0,
+    "view_count": 0
   }
 }
 ```
@@ -936,65 +587,94 @@ GET
 
 ## V1
 
-支持：
-
-* 媒体管理
-* 搜索
-* 收藏
-* 评分
-* 已看
-* 历史记录
+* Media
+* Scanner
+* Tag
+* Category
+* Search
+* Behavior
 
 ---
 
 ## V2
 
-支持：
-
-* 推荐引擎
-* 首页发现流
-* 相似推荐
+* Recommendation
+* Discovery Feed
+* Interest Profile
 
 ---
 
 ## V3
 
-支持：
+* Similar Recommendation
+* Rediscover
+* Cross Media Recommendation
 
-* 兴趣画像
-* AI发现引擎
-* 语义搜索
+---
+
+## V4
+
+* AI Discovery
+* Semantic Recommendation
+* AI Tagging
 
 ---
 
 # 十七、接口分层原则
 
-API层负责：
+严格遵守：
+
+```text
+API
+↓
+Service
+↓
+Repository
+↓
+Database
+```
+
+---
+
+API层职责：
 
 * 参数校验
-* 请求解析
-* 响应转换
+* DTO转换
+* 响应封装
 
 禁止：
 
 * SQL
-* Repository调用链绕过Service
+* Repository直调
 * 业务逻辑
 
-必须遵循：
+---
 
-API
+# 十八、API优先级
 
-↓
+系统开发优先级：
 
-Service
+```text
+1. Discovery API
 
-↓
+2. Recommendation API
 
-Repository
+3. Behavior API
 
-↓
+4. Media API
 
-Database
+5. Search API
 
-架构规范。
+6. Scanner API
+
+7. System API
+```
+
+该优先级必须与：
+
+* PRD
+* SAD
+* ERD
+* RecommendationEngine
+
+保持一致。

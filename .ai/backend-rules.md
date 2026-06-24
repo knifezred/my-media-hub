@@ -4,7 +4,7 @@ Stack:
 
 - Go
 - Gin
-- SQLite
+- SQLite (modernc.org/sqlite — pure Go, no CGO)
 - FTS5
 
 ---

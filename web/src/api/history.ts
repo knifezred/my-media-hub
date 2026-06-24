@@ -1,15 +1,8 @@
-import type { ListData } from '../types'
+import type { PaginationData, SearchHistory } from '../types'
 import { post, del } from './client'
 
-export interface SearchHistory {
-  id: number
-  keyword: string
-  result_count: number
-  created_at: string
-}
-
-export function fetchSearchHistory(): Promise<ListData<SearchHistory>> {
-  return post('/search/history/page')
+export function fetchSearchHistory(params: { page?: number; page_size?: number } = {}): Promise<PaginationData<SearchHistory>> {
+  return post('/search/history/page', params)
 }
 
 export function deleteSearchHistory(id: number): Promise<void> {

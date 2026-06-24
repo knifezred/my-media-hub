@@ -1,87 +1,80 @@
-# ERD - 数据库设计文档
+# My Media Hub - 数据库设计文档（ERD）
 
-# My Media Hub
-
-版本：1.0
+版本：2.0
 
 状态：Draft
 
 数据库：
 
-SQLite 3 + FTS5
+SQLite 3
 
 ---
 
 # 一、设计目标
 
-数据库设计目标：
+数据库围绕以下核心目标设计：
 
-* 支持百万级资源
-* 支持高速搜索
-* 支持推荐计算
-* 支持用户行为分析
-* 支持未来媒体扩展
+* Discovery First
+* Recommendation First
+* Behavior Driven
+
+支持：
+
+* 图片
+* 视频
+* 小说
+
+支持未来：
+
+* 漫画
+* 音乐
+* PDF
+* 课程
+
+支持：
+
+* 百万级资源
+* 推荐计算
+* 用户兴趣画像
+* 发现流生成
 
 ---
 
-# 二、核心设计原则
+# 二、核心数据流
 
-## 媒体统一模型
-
-图片
-
-视频
-
-小说
-
-统一抽象为：
-
+```text
 Media
-
----
-
-## 行为驱动推荐
-
-推荐系统主要依赖：
-
-用户行为
-
-而不是目录结构。
-
----
-
-## 少 JOIN
-
-优先：
-
-冗余字段
-
-避免复杂关联查询。
+↓
+User Behavior
+↓
+Interest Profile
+↓
+Recommendation
+↓
+Discovery Feed
+```
 
 ---
 
 # 三、实体关系图
 
-```text id="8yz1n9"
+```text
 Media
- │
- ├── MediaTag
- │
- ├── MediaCategory
- │
- ├── MediaMetadata
- │
- ├── UserFavorite
- │
- ├── UserRating
- │
- ├── UserViewed
- │
- ├── UserHidden
- │
- ├── SearchHistory
- │
- └── RecommendationCache
+│
+├── MediaTag
+├── MediaCategory
+├── MediaMetadata
+│
+├── UserBehavior
+│
+├── SearchHistory
+├── SearchClickHistory
+│
+├── InterestProfile
+│
+├── RecommendationCache
+│
+└── DiscoveryFeedLog
 ```
 
 ---
@@ -92,55 +85,33 @@ Media
 
 媒体主表
 
-### 字段
+| 字段          | 类型      |
+| ----------- | ------- |
+| id          | INTEGER |
+| media_type  | TEXT    |
+| title       | TEXT    |
+| description | TEXT    |
+| path        | TEXT    |
+| hash        | TEXT    |
+| size        | INTEGER |
+| cover_path  | TEXT    |
 
-| 字段          | 类型       |
-| ----------- | -------- |
-| id          | INTEGER  |
-| media_type  | TEXT     |
-| title       | TEXT     |
-| description | TEXT     |
-| path        | TEXT     |
-| hash        | TEXT     |
-| size        | INTEGER  |
-| cover_path  | TEXT     |
-| created_at  | DATETIME |
-| updated_at  | DATETIME |
+统计字段：
 
----
+| 字段             | 类型       |
+| -------------- | -------- |
+| favorite_count | INTEGER  |
+| view_count     | INTEGER  |
+| rating_count   | INTEGER  |
+| avg_rating     | REAL     |
+| last_viewed_at | DATETIME |
 
-### media_type
+审计字段：
 
-支持：
-
-```text id="1zhnd6"
-image
-video
-novel
-```
-
-未来：
-
-```text id="u0a4xg"
-comic
-music
-pdf
-course
-```
-
----
-
-### 索引
-
-```sql id="3d4hkr"
-idx_media_type
-
-idx_media_created_at
-
-idx_media_hash
-
-idx_media_path
-```
+| 字段         | 类型       |
+| ---------- | -------- |
+| created_at | DATETIME |
+| updated_at | DATETIME |
 
 ---
 
@@ -148,54 +119,28 @@ idx_media_path
 
 ## media_metadata
 
-媒体扩展信息
+KV扩展字段
 
-### 字段
+| 字段         | 类型      |
+| ---------- | ------- |
+| id         | INTEGER |
+| media_id   | INTEGER |
+| meta_key   | TEXT    |
+| meta_value | TEXT    |
 
-| 字段       | 类型      |
-| -------- | ------- |
-| id       | INTEGER |
-| media_id | INTEGER |
-| key      | TEXT    |
-| value    | TEXT    |
+示例：
 
----
-
-### 示例
-
-```text id="e9hzli"
-author
-
-publisher
-
-actor
-
-director
-
-camera
-
-resolution
-```
-
----
-
-### 索引
-
-```sql id="ftl8uv"
-idx_media_metadata_media
-
-idx_media_metadata_key
-```
+* author
+* actor
+* director
+* publisher
+* resolution
 
 ---
 
 # 六、标签
 
 ## tag
-
-标签表
-
-### 字段
 
 | 字段   | 类型      |
 | ---- | ------- |
@@ -204,19 +149,7 @@ idx_media_metadata_key
 
 ---
 
-### 索引
-
-```sql id="1jwvyr"
-uniq_tag_name
-```
-
----
-
-# 七、媒体标签关系
-
 ## media_tag
-
-### 字段
 
 | 字段       | 类型      |
 | -------- | ------- |
@@ -225,21 +158,9 @@ uniq_tag_name
 
 ---
 
-### 索引
-
-```sql id="1dtpsf"
-idx_media_tag_media
-
-idx_media_tag_tag
-```
-
----
-
-# 八、分类
+# 七、分类
 
 ## category
-
-### 字段
 
 | 字段        | 类型      |
 | --------- | ------- |
@@ -249,11 +170,7 @@ idx_media_tag_tag
 
 ---
 
-# 九、媒体分类关系
-
 ## media_category
-
-### 字段
 
 | 字段          | 类型      |
 | ----------- | ------- |
@@ -262,109 +179,66 @@ idx_media_tag_tag
 
 ---
 
-# 十、收藏
+# 八、统一用户行为
 
-## user_favorite
+## user_behavior
 
-### 字段
+推荐系统核心表
 
-| 字段         | 类型       |
-| ---------- | -------- |
-| id         | INTEGER  |
-| media_id   | INTEGER  |
-| created_at | DATETIME |
+| 字段            | 类型       |
+| ------------- | -------- |
+| id            | INTEGER  |
+| media_id      | INTEGER  |
+| behavior_type | TEXT     |
+| score         | REAL     |
+| created_at    | DATETIME |
 
----
+behavior_type：
 
-### 说明
+* favorite
+* rating
+* view
+* click
+* hidden
+* search_click
 
-单用户系统。
+示例：
 
-无需 user_id。
+favorite → score=5
 
----
+rating(5星) → score=5
 
-# 十一、评分
+view → score=1
 
-## user_rating
+click → score=1
 
-### 字段
-
-| 字段         | 类型       |
-| ---------- | -------- |
-| id         | INTEGER  |
-| media_id   | INTEGER  |
-| rating     | INTEGER  |
-| created_at | DATETIME |
-
----
-
-### rating
-
-范围：
-
-```text id="ckmy8t"
-1 ~ 5
-```
+hidden → score=-5
 
 ---
 
-# 十二、已看
-
-## user_viewed
-
-### 字段
-
-| 字段        | 类型       |
-| --------- | -------- |
-| id        | INTEGER  |
-| media_id  | INTEGER  |
-| viewed_at | DATETIME |
-
----
-
-# 十三、不感兴趣
-
-## user_hidden
-
-### 字段
-
-| 字段         | 类型       |
-| ---------- | -------- |
-| id         | INTEGER  |
-| media_id   | INTEGER  |
-| created_at | DATETIME |
-
----
-
-# 十四、搜索历史
+# 九、搜索历史
 
 ## search_history
 
-### 字段
+| 字段            | 类型       |
+| ------------- | -------- |
+| id            | INTEGER  |
+| keyword       | TEXT     |
+| search_source | TEXT     |
+| result_count  | INTEGER  |
+| created_at    | DATETIME |
 
-| 字段           | 类型       |
-| ------------ | -------- |
-| id           | INTEGER  |
-| keyword      | TEXT     |
-| result_count | INTEGER  |
-| created_at   | DATETIME |
+search_source：
 
----
-
-### 用途
-
-行为分析
-
-推荐优化
+* search
+* recommendation
+* discovery
 
 ---
 
-# 十五、搜索点击历史
+# 十、搜索点击历史
 
 ## search_click_history
-
-### 字段
 
 | 字段         | 类型       |
 | ---------- | -------- |
@@ -376,184 +250,119 @@ idx_media_tag_tag
 
 ---
 
-### 用途
+# 十一、兴趣画像
 
-分析：
+## interest_profile
 
-用户真正选择了什么。
+用户兴趣聚合结果
+
+| 字段          | 类型       |
+| ----------- | -------- |
+| id          | INTEGER  |
+| profile_key | TEXT     |
+| score       | REAL     |
+| updated_at  | DATETIME |
+
+示例：
+
+* 科幻
+* 摄影
+* 推理
+* 动漫
+* AI
 
 ---
 
-# 十六、推荐缓存
+# 十二、推荐缓存
 
 ## recommendation_cache
 
-### 字段
+| 字段            | 类型       |
+| ------------- | -------- |
+| id            | INTEGER  |
+| strategy_name | TEXT     |
+| media_id      | INTEGER  |
+| score         | REAL     |
+| generated_at  | DATETIME |
 
-| 字段                  | 类型       |
-| ------------------- | -------- |
-| id                  | INTEGER  |
-| recommendation_type | TEXT     |
-| media_id            | INTEGER  |
-| score               | REAL     |
-| generated_at        | DATETIME |
+strategy_name：
 
----
-
-### recommendation_type
-
-```text id="h5i5z5"
-random
-
-recent
-
-favorite
-
-rating
-
-tag
-
-category
-
-similar
-```
+* random
+* recent
+* favorite_based
+* tag_based
+* category_based
+* similar
 
 ---
 
-# 十七、全文搜索
+# 十三、发现流记录
 
-## media_fts
+## discovery_feed_log
 
-FTS5 虚拟表
+记录曾推荐给用户的内容
 
----
+| 字段         | 类型       |
+| ---------- | -------- |
+| id         | INTEGER  |
+| feed_type  | TEXT     |
+| media_id   | INTEGER  |
+| score      | REAL     |
+| created_at | DATETIME |
 
-索引字段：
+feed_type：
 
-```text id="l9f15y"
-title
+* daily
+* discover
+* guess_like
+* rediscover
 
-description
+作用：
 
-tags
-
-author
-
-metadata
-```
-
----
-
-查询：
-
-```sql id="ukg7vt"
-MATCH
-```
+避免首页长期推荐相同内容。
 
 ---
 
-# 十八、推荐引擎数据来源
-
-推荐计算来源：
-
-## 收藏
-
-user_favorite
-
----
-
-## 评分
-
-user_rating
-
----
-
-## 已看
-
-user_viewed
-
----
-
-## 搜索
-
-search_history
-
----
-
-## 点击
-
-search_click_history
-
----
-
-## 标签
-
-media_tag
-
----
-
-## 分类
-
-media_category
-
----
-
-# 十九、性能设计
-
-目标：
-
-图片：
-
-300万+
-
-小说：
-
-300万+
-
-视频：
-
-20万+
-
----
-
-原则：
+# 十四、索引原则
 
 所有列表查询必须命中索引。
 
 禁止全表扫描。
 
+重点索引：
+
+media：
+
+* idx_media_type
+* idx_media_created_at
+* idx_media_hash
+
+user_behavior：
+
+* idx_behavior_media
+* idx_behavior_type
+* idx_behavior_created_at
+
+interest_profile：
+
+* idx_profile_score
+
+recommendation_cache：
+
+* idx_strategy_score
+
 ---
 
-FTS5负责：
-
-全文搜索。
-
----
-
-普通索引负责：
-
-过滤
-
-排序
-
-推荐计算。
-
----
-
-# 二十、未来扩展
+# 十五、未来扩展
 
 新增媒体类型：
 
 无需新增表。
 
-仅新增：
+仅扩展：
 
-```text id="0m0utl"
-media_type
-```
-
-枚举值。
+media.media_type
 
 即可接入系统。
 
-数据库结构保持稳定。
+数据库结构长期保持稳定。

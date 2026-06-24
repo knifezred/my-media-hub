@@ -14,6 +14,7 @@ const (
 	SearchKeywordEmpty     = 30001
 	ValidationError        = 40001
 	ParameterInvalid       = 40002
+	NotFound               = 40003
 	ScanInProgress         = 50001
 	ScanNotRunning         = 50002
 	InternalError          = 90001
@@ -33,6 +34,7 @@ var messages = map[int]string{
 	SearchKeywordEmpty:    "search keyword cannot be empty",
 	ValidationError:       "validation error",
 	ParameterInvalid:      "invalid parameter",
+	NotFound:              "resource not found",
 	ScanInProgress:        "scan is already in progress",
 	ScanNotRunning:        "no scan task is running",
 	InternalError:         "internal server error",

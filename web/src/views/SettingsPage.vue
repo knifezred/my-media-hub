@@ -5,21 +5,45 @@ import type { ScannerStatus } from '../types'
 
 const scanPaths = ref('')
 const scanStatus = ref<ScannerStatus | null>(null)
+const scanning = ref(false)
 
 async function handleStartScan() {
+  const dirs = scanPaths.value
+    .split('\n')
+    .map(s => s.trim())
+    .filter(Boolean)
+  if (!dirs.length) return
+
+  scanning.value = true
   try {
-    await startScan()
+    await startScan(dirs)
+    scanStatus.value = { running: true, processed: 0, total: 0, progress: 0 }
+    pollStatus()
   } catch {
-    // API not ready yet
+    scanning.value = false
   }
+}
+
+async function pollStatus() {
+  const interval = setInterval(async () => {
+    try {
+      const status = await fetchScanStatus()
+      scanStatus.value = status
+      if (!status.running) {
+        clearInterval(interval)
+        scanning.value = false
+      }
+    } catch {
+      clearInterval(interval)
+      scanning.value = false
+    }
+  }, 2000)
 }
 
 async function loadStatus() {
   try {
     scanStatus.value = await fetchScanStatus()
-  } catch {
-    // API not ready yet
-  }
+  } catch {}
 }
 </script>
 
@@ -36,15 +60,27 @@ async function loadStatus() {
           rows="5"
         />
       </div>
-      <button class="btn-primary" @click="handleStartScan">启动扫描</button>
-      <button class="btn-secondary" @click="loadStatus" style="margin-left: 8px;">刷新状态</button>
+      <div class="btn-group">
+        <button class="btn-primary" :disabled="scanning || !scanPaths.trim()" @click="handleStartScan">
+          {{ scanning ? '扫描中...' : '启动扫描' }}
+        </button>
+        <button class="btn-secondary" @click="loadStatus">刷新状态</button>
+      </div>
 
       <div v-if="scanStatus" class="scan-status">
-        <p>状态: {{ scanStatus.running ? '扫描中' : '空闲' }}</p>
-        <p v-if="scanStatus.running">
-          进度: {{ scanStatus.processed }}/{{ scanStatus.total }}
-          ({{ scanStatus.progress }}%)
-        </p>
+        <div class="status-row">
+          <span class="status-label">状态</span>
+          <span class="status-value" :class="{ active: scanStatus.running }">
+            {{ scanStatus.running ? '扫描中' : '空闲' }}
+          </span>
+        </div>
+        <div v-if="scanStatus.total > 0" class="progress-bar-bg">
+          <div class="progress-bar-fill" :style="{ width: scanStatus.progress + '%' }" />
+        </div>
+        <div v-if="scanStatus.running" class="status-row">
+          <span class="status-label">进度</span>
+          <span class="status-value">{{ scanStatus.processed }}/{{ scanStatus.total }} ({{ Math.round(scanStatus.progress) }}%)</span>
+        </div>
       </div>
     </section>
 
@@ -105,6 +141,11 @@ async function loadStatus() {
   border-color: var(--accent);
 }
 
+.btn-group {
+  display: flex;
+  gap: 8px;
+}
+
 .btn-primary {
   padding: 10px 24px;
   border: none;
@@ -115,8 +156,13 @@ async function loadStatus() {
   font-size: 14px;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   opacity: 0.9;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-secondary {
@@ -135,11 +181,46 @@ async function loadStatus() {
 
 .scan-status {
   margin-top: 16px;
-  padding: 12px;
+  padding: 16px;
   border-radius: 8px;
   background: var(--bg-hover);
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.status-label {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+.status-value {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status-value.active {
+  color: var(--accent);
+}
+
+.progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 1s ease;
 }
 
 .info-list {
