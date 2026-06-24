@@ -14,24 +14,27 @@ func NewSearchHistoryRepository(db *sql.DB) *SearchHistoryRepository {
 	return &SearchHistoryRepository{db: db}
 }
 
-func (r *SearchHistoryRepository) Insert(keyword, searchSource string, resultCount int) (int64, error) {
-	result, err := r.db.Exec(
-		"INSERT INTO search_history (keyword, search_source, result_count) VALUES (?, ?, ?)",
-		keyword, searchSource, resultCount,
-	)
+// InsertOrUpdate 去重插入搜索历史（同关键词聚合）
+func (r *SearchHistoryRepository) InsertOrUpdate(keyword string) (int64, error) {
+	norm := normalizeKeyword(keyword)
+	res, err := r.db.Exec(`
+		INSERT INTO search_history (keyword, keyword_norm, use_count)
+		VALUES (?, ?, 1)
+		ON CONFLICT(keyword_norm) DO UPDATE SET
+			use_count = use_count + 1,
+			last_used_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
+		keyword, norm)
 	if err != nil {
 		return 0, fmt.Errorf("insert search history: %w", err)
 	}
-	return result.LastInsertId()
+	return res.LastInsertId()
 }
 
 func (r *SearchHistoryRepository) List(page, pageSize int) ([]model.SearchHistory, int64, error) {
 	var total int64
-	err := r.db.QueryRow("SELECT COUNT(*) FROM search_history").Scan(&total)
-	if err != nil {
-		return nil, 0, fmt.Errorf("count search history: %w", err)
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM search_history`).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-
 	if page < 1 {
 		page = 1
 	}
@@ -39,11 +42,10 @@ func (r *SearchHistoryRepository) List(page, pageSize int) ([]model.SearchHistor
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
-
-	rows, err := r.db.Query(
-		"SELECT id, keyword, search_source, result_count, created_at FROM search_history ORDER BY created_at DESC LIMIT ? OFFSET ?",
-		pageSize, offset,
-	)
+	rows, err := r.db.Query(`
+		SELECT id, keyword, keyword_norm, use_count, last_used_at, created_at
+		FROM search_history ORDER BY last_used_at DESC LIMIT ? OFFSET ?`,
+		pageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list search history: %w", err)
 	}
@@ -52,8 +54,8 @@ func (r *SearchHistoryRepository) List(page, pageSize int) ([]model.SearchHistor
 	items := make([]model.SearchHistory, 0)
 	for rows.Next() {
 		var h model.SearchHistory
-		if err := rows.Scan(&h.ID, &h.Keyword, &h.SearchSource, &h.ResultCount, &h.CreatedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan search history: %w", err)
+		if err := rows.Scan(&h.ID, &h.Keyword, &h.KeywordNorm, &h.UseCount, &h.LastUsedAt, &h.CreatedAt); err != nil {
+			return nil, 0, err
 		}
 		items = append(items, h)
 	}
@@ -61,17 +63,11 @@ func (r *SearchHistoryRepository) List(page, pageSize int) ([]model.SearchHistor
 }
 
 func (r *SearchHistoryRepository) Delete(id int64) error {
-	_, err := r.db.Exec("DELETE FROM search_history WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("delete search history: %w", err)
-	}
-	return nil
+	_, err := r.db.Exec(`DELETE FROM search_history WHERE id = ?`, id)
+	return err
 }
 
 func (r *SearchHistoryRepository) Clear() error {
-	_, err := r.db.Exec("DELETE FROM search_history")
-	if err != nil {
-		return fmt.Errorf("clear search history: %w", err)
-	}
-	return nil
+	_, err := r.db.Exec(`DELETE FROM search_history`)
+	return err
 }

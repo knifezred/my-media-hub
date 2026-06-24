@@ -2,9 +2,9 @@
 
 # My Media Hub
 
-版本：2.0
+版本：2.1
 
-状态：Draft
+状态：Stable
 
 最后更新：2026-06
 
@@ -356,6 +356,66 @@ Interest Profile
 ↓
 Recommendation
 ```
+
+---
+
+## 媒体资源状态机
+
+媒体主表（media）通过 `status` 字段表达资源的生命周期状态。
+
+这是数据流的关键节点——所有外部系统（Scanner、用户操作、文件系统事件）都通过状态机驱动资源状态。
+
+```text
+new
+ ↓
+parsing
+ ↓
+active
+
+parsing
+ ↓
+error
+
+active
+ ↓
+missing
+
+missing
+ ↓
+active
+
+任意状态
+ ↓
+deleted
+```
+
+### 状态语义
+
+| 状态       | 含义                  | 触发                    |
+| -------- | ------------------- | --------------------- |
+| new      | 新建尚未解析              | Scanner 发现新文件         |
+| parsing  | 正在解析元数据             | 后台任务开始解析              |
+| active   | 正常可用                | 解析成功 / missing 文件恢复   |
+| missing  | 文件丢失（磁盘文件被删/移走）     | 定时扫描发现文件不存在          |
+| error    | 解析失败（last_error 记录原因） | 解析任务异常               |
+| deleted  | 用户主动删除（软删）          | 用户在 UI 移除资源          |
+
+### 设计要点
+
+* `status` 是状态机的入口——所有状态变更都走 Service 层
+* `last_error` 字段记录 `error` 状态的原因（解析器输出、文件 I/O 错误等）
+* `active` ↔ `missing` 双向转移：文件被恢复时无需重新解析
+* `deleted` 是终态——软删后不进入推荐池
+
+### 状态与行为流水的关系
+
+`media.status` 表示资源生命周期（资源现在怎么样了）；
+`media_behavior` 表示用户行为历史（用户对它做了什么）。
+
+两者正交：
+
+* 资源可处于 `parsing` 但用户已经 `view` 过（前端先添加后解析）
+* 资源可处于 `missing` 但用户的 `favorite` 行为仍保留（行为流水不丢）
 
 ---
 

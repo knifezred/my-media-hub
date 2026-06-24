@@ -24,7 +24,6 @@ func (s *SearchService) Search(req model.SearchRequest) (*model.PageResponse, er
 	if err != nil {
 		return nil, err
 	}
-
 	page := req.Page
 	if page < 1 {
 		page = 1
@@ -33,9 +32,8 @@ func (s *SearchService) Search(req model.SearchRequest) (*model.PageResponse, er
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
-
-	s.history.Insert(req.Keyword, "search", int(total))
-
+	// 记录搜索历史
+	s.history.InsertOrUpdate(req.Keyword)
 	return &model.PageResponse{
 		Items:    items,
 		Total:    total,

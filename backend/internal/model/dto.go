@@ -13,24 +13,17 @@ type PageResponse struct {
 }
 
 type MediaPageRequest struct {
-	Page       int     `json:"page"`
-	PageSize   int     `json:"page_size"`
-	MediaType  string  `json:"media_type"`
-	CategoryID int64   `json:"category_id"`
-	TagID      int64   `json:"tag_id"`
-	Sort       string  `json:"sort"`
-	TagIDs     []int64 `json:"tag_ids"`
+	Page      int    `json:"page"`
+	PageSize  int    `json:"page_size"`
+	MediaType string `json:"media_type"`
+	Status    string `json:"status"`
+	Sort      string `json:"sort"`
 }
 
 type MediaDetail struct {
 	Media
-	Tags       []Tag     `json:"tags"`
+	Tags       []Tag      `json:"tags"`
 	Categories []Category `json:"categories"`
-	Metadata   map[string]string `json:"metadata"`
-	Favorite   bool      `json:"favorite"`
-	Rating     int       `json:"rating"`
-	Viewed     bool      `json:"viewed"`
-	Hidden     bool      `json:"hidden"`
 }
 
 type SearchRequest struct {
@@ -40,32 +33,37 @@ type SearchRequest struct {
 	PageSize  int    `json:"page_size"`
 }
 
-type FavoritePageRequest struct {
-	Page      int    `json:"page"`
-	PageSize  int    `json:"page_size"`
-	MediaType string `json:"media_type"`
+// BehaviorRequest 记录行为请求（v2.1）
+type BehaviorRequest struct {
+	MediaID        int64  `json:"media_id"`
+	BehaviorType   string `json:"behavior_type"`
+	BehaviorValue  string `json:"behavior_value"`
+	BehaviorSource string `json:"behavior_source"`
 }
 
-type BehaviorRequest struct {
-	MediaID      int64   `json:"media_id"`
-	BehaviorType string  `json:"behavior_type"`
-	Score        float64 `json:"score"`
+// RateRequest 评分请求（v2.1 支持 0.5 步进）
+type RateRequest struct {
+	MediaID int64   `json:"media_id"`
+	Rating  float64 `json:"rating"`
+}
+
+type MediaIDRequest struct {
+	MediaID int64 `json:"media_id"`
 }
 
 type BehaviorStatistics struct {
 	FavoriteCount int64 `json:"favorite_count"`
 	ViewCount     int64 `json:"view_count"`
-	RatingCount   int64 `json:"rating_count"`
-	HiddenCount   int64 `json:"hidden_count"`
+	RateCount     int64 `json:"rate_count"`
+	HideCount     int64 `json:"hide_count"`
 }
 
 type StatsOverview struct {
-	TotalMedia    int64 `json:"total_media"`
-	TotalImages   int64 `json:"total_images"`
-	TotalVideos   int64 `json:"total_videos"`
-	TotalNovels   int64 `json:"total_novels"`
-	FavoriteCount int64 `json:"favorite_count"`
-	ViewedCount   int64 `json:"viewed_count"`
+	TotalMedia  int64 `json:"total_media"`
+	TotalImages int64 `json:"total_images"`
+	TotalVideos int64 `json:"total_videos"`
+	TotalNovels int64 `json:"total_novels"`
+	TotalMusic  int64 `json:"total_music"`
 }
 
 type ScannerStatus struct {
@@ -73,13 +71,4 @@ type ScannerStatus struct {
 	Processed int     `json:"processed"`
 	Total     int     `json:"total"`
 	Progress  float64 `json:"progress"`
-}
-
-type RateRequest struct {
-	MediaID int64 `json:"media_id"`
-	Rating  int   `json:"rating"`
-}
-
-type MediaIDRequest struct {
-	MediaID int64 `json:"media_id"`
 }

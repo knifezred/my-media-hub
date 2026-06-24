@@ -20,7 +20,7 @@ func Setup(db *sql.DB, idx *search.Index) *gin.Engine {
 
 	behaviorSvc := service.NewBehaviorService(db)
 
-	mediaSvc := service.NewMediaService(db, behaviorSvc)
+	mediaSvc := service.NewMediaService(db)
 	mediaAPI := api.NewMediaAPI(mediaSvc)
 	mediaAPI.Register(apiGroup)
 

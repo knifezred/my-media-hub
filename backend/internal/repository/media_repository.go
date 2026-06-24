@@ -14,29 +14,19 @@ func NewMediaRepository(db *sql.DB) *MediaRepository {
 	return &MediaRepository{db: db}
 }
 
-func (r *MediaRepository) Insert(m *model.Media) (int64, error) {
-	result, err := r.db.Exec(`
-		INSERT INTO media (media_type, title, description, path, hash, size, cover_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		m.MediaType, m.Title, m.Description, m.Path, m.Hash, m.Size, m.CoverPath,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("insert media: %w", err)
-	}
-	return result.LastInsertId()
-}
-
 const mediaFields = `id, media_type, title, description, path, hash, size, cover_path,
-	favorite_count, view_count, rating_count, avg_rating, last_viewed_at, created_at, updated_at`
+	status, last_error, metadata_json, metadata_version,
+	favorite, favorite_at, rating, rating_at, hidden, hidden_at,
+	view_count, last_viewed_at, created_at, updated_at`
 
-func scanMedia(scanner interface {
-	Scan(dest ...interface{}) error
-}) (*model.Media, error) {
+func scanMedia(s scanner) (*model.Media, error) {
 	m := &model.Media{}
-	var lastViewedAt sql.NullTime
-	err := scanner.Scan(
+	var favoriteAt, ratingAt, hiddenAt, lastViewedAt sql.NullString
+	err := s.Scan(
 		&m.ID, &m.MediaType, &m.Title, &m.Description, &m.Path, &m.Hash, &m.Size, &m.CoverPath,
-		&m.FavoriteCount, &m.ViewCount, &m.RatingCount, &m.AvgRating, &lastViewedAt, &m.CreatedAt, &m.UpdatedAt,
+		&m.Status, &m.LastError, &m.MetadataJSON, &m.MetadataVersion,
+		&m.Favorite, &favoriteAt, &m.Rating, &ratingAt, &m.Hidden, &hiddenAt,
+		&m.ViewCount, &lastViewedAt, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -44,10 +34,15 @@ func scanMedia(scanner interface {
 	if err != nil {
 		return nil, fmt.Errorf("scan media: %w", err)
 	}
-	if lastViewedAt.Valid {
-		m.LastViewedAt = &lastViewedAt.Time
-	}
+	m.FavoriteAt = parseTime(favoriteAt)
+	m.RatingAt = parseTime(ratingAt)
+	m.HiddenAt = parseTime(hiddenAt)
+	m.LastViewedAt = parseTime(lastViewedAt)
 	return m, nil
+}
+
+type scanner interface {
+	Scan(dest ...interface{}) error
 }
 
 func (r *MediaRepository) GetByID(id int64) (*model.Media, error) {
@@ -70,41 +65,45 @@ func (r *MediaRepository) List(req model.MediaPageRequest) ([]model.Media, int64
 	args := []interface{}{}
 
 	if req.MediaType != "" {
-		where += " AND m.media_type = ?"
+		where += " AND media_type = ?"
 		args = append(args, req.MediaType)
 	}
+	if req.Status != "" {
+		where += " AND status = ?"
+		args = append(args, req.Status)
+	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM media m %s", where)
 	var total int64
-	err := r.db.QueryRow(countQuery, args...).Scan(&total)
-	if err != nil {
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM media `+where, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count media: %w", err)
 	}
 
-	if req.Page < 1 {
-		req.Page = 1
+	page := req.Page
+	if page < 1 {
+		page = 1
 	}
 	pageSize := req.PageSize
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
-	offset := (req.Page - 1) * pageSize
+	offset := (page - 1) * pageSize
 
-	order := "ORDER BY m.created_at DESC"
+	order := "ORDER BY created_at DESC"
 	switch req.Sort {
 	case "title":
-		order = "ORDER BY m.title ASC"
+		order = "ORDER BY title ASC"
 	case "size":
-		order = "ORDER BY m.size DESC"
+		order = "ORDER BY size DESC"
 	case "random":
 		order = "ORDER BY RANDOM()"
+	case "viewed":
+		order = "ORDER BY last_viewed_at DESC"
 	}
 
-	query := fmt.Sprintf(`
-		SELECT m.`+mediaFields+` FROM media m %s %s LIMIT ? OFFSET ?`, where, order)
-	args = append(args, pageSize, offset)
-
-	rows, err := r.db.Query(query, args...)
+	rows, err := r.db.Query(
+		`SELECT `+mediaFields+` FROM media `+where+` `+order+` LIMIT ? OFFSET ?`,
+		append(args, pageSize, offset)...,
+	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list media: %w", err)
 	}
@@ -121,78 +120,103 @@ func (r *MediaRepository) List(req model.MediaPageRequest) ([]model.Media, int64
 	return items, total, nil
 }
 
+func (r *MediaRepository) Insert(m *model.Media) (int64, error) {
+	res, err := r.db.Exec(`
+		INSERT INTO media (media_type, title, description, path, hash, size, cover_path, status, metadata_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.MediaType, m.Title, m.Description, m.Path, m.Hash, m.Size, m.CoverPath,
+		m.Status, m.MetadataJSON,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert media: %w", err)
+	}
+	return res.LastInsertId()
+}
+
 func (r *MediaRepository) Update(m *model.Media) error {
 	_, err := r.db.Exec(`
-		UPDATE media SET media_type=?, title=?, description=?, path=?, hash=?, size=?, cover_path=?
+		UPDATE media SET media_type=?, title=?, description=?, path=?, hash=?, size=?, cover_path=?,
+			metadata_json=?, metadata_version=?
 		WHERE id=?`,
-		m.MediaType, m.Title, m.Description, m.Path, m.Hash, m.Size, m.CoverPath, m.ID,
+		m.MediaType, m.Title, m.Description, m.Path, m.Hash, m.Size, m.CoverPath,
+		m.MetadataJSON, m.MetadataVersion, m.ID,
 	)
-	if err != nil {
-		return fmt.Errorf("update media: %w", err)
-	}
-	return nil
+	return err
 }
 
-func (r *MediaRepository) UpdateStats(id int64, favoriteCount, viewCount, ratingCount int64, avgRating float64) error {
-	_, err := r.db.Exec(`
-		UPDATE media SET favorite_count=?, view_count=?, rating_count=?, avg_rating=?
-		WHERE id=?`,
-		favoriteCount, viewCount, ratingCount, avgRating, id,
-	)
-	if err != nil {
-		return fmt.Errorf("update media stats: %w", err)
-	}
-	return nil
+func (r *MediaRepository) UpdateStatus(id int64, status, lastError string) error {
+	_, err := r.db.Exec(`UPDATE media SET status=?, last_error=? WHERE id=?`,
+		status, lastError, id)
+	return err
 }
 
-func (r *MediaRepository) UpdateViewStats(id int64, viewCount int64) error {
-	_, err := r.db.Exec(`
-		UPDATE media SET view_count=?, last_viewed_at=CURRENT_TIMESTAMP WHERE id=?`,
-		viewCount, id,
-	)
-	if err != nil {
-		return fmt.Errorf("update view stats: %w", err)
+// 状态字段直接更新（favorite / rating / hidden / view）
+func (r *MediaRepository) SetFavorite(id int64, favorite bool) error {
+	if favorite {
+		_, err := r.db.Exec(`UPDATE media SET favorite=1, favorite_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`, id)
+		return err
 	}
-	return nil
+	_, err := r.db.Exec(`UPDATE media SET favorite=0, favorite_at=NULL WHERE id=?`, id)
+	return err
+}
+
+func (r *MediaRepository) SetRating(id int64, rating float64) error {
+	if rating <= 0 {
+		_, err := r.db.Exec(`UPDATE media SET rating=0, rating_at=NULL WHERE id=?`, id)
+		return err
+	}
+	_, err := r.db.Exec(`UPDATE media SET rating=?, rating_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`, rating, id)
+	return err
+}
+
+func (r *MediaRepository) SetHidden(id int64, hidden bool) error {
+	if hidden {
+		_, err := r.db.Exec(`UPDATE media SET hidden=1, hidden_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`, id)
+		return err
+	}
+	_, err := r.db.Exec(`UPDATE media SET hidden=0, hidden_at=NULL WHERE id=?`, id)
+	return err
+}
+
+func (r *MediaRepository) IncViewCount(id int64) error {
+	_, err := r.db.Exec(`
+		UPDATE media SET view_count=view_count+1, last_viewed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+		WHERE id=?`, id)
+	return err
 }
 
 func (r *MediaRepository) Delete(id int64) error {
-	_, err := r.db.Exec("DELETE FROM media WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("delete media: %w", err)
-	}
-	return nil
+	_, err := r.db.Exec(`DELETE FROM media WHERE id=?`, id)
+	return err
 }
 
 func (r *MediaRepository) Count() (int64, error) {
 	var count int64
-	err := r.db.QueryRow("SELECT COUNT(*) FROM media").Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("count media: %w", err)
-	}
-	return count, nil
+	err := r.db.QueryRow(`SELECT COUNT(*) FROM media`).Scan(&count)
+	return count, err
 }
 
-func (r *MediaRepository) CountByType() (images, videos, novels int64, err error) {
-	rows, err := r.db.Query("SELECT media_type, COUNT(*) FROM media GROUP BY media_type")
+func (r *MediaRepository) CountByType() (images, videos, novels, music int64, err error) {
+	rows, err := r.db.Query(`SELECT media_type, COUNT(*) FROM media GROUP BY media_type`)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("count by type: %w", err)
+		return 0, 0, 0, 0, err
 	}
 	defer rows.Close()
-
 	for rows.Next() {
-		var mediaType string
-		var count int64
-		if err := rows.Scan(&mediaType, &count); err != nil {
-			return 0, 0, 0, fmt.Errorf("scan count by type: %w", err)
+		var t string
+		var c int64
+		if err := rows.Scan(&t, &c); err != nil {
+			return 0, 0, 0, 0, err
 		}
-		switch mediaType {
-		case "image":
-			images = count
-		case "video":
-			videos = count
-		case "novel":
-			novels = count
+		switch t {
+		case model.MediaTypeImage:
+			images = c
+		case model.MediaTypeVideo:
+			videos = c
+		case model.MediaTypeNovel:
+			novels = c
+		case model.MediaTypeMusic:
+			music = c
 		}
 	}
 	return

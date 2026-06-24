@@ -1,8 +1,8 @@
 # My Media Hub - 推荐引擎设计文档
 
-版本：2.0
+版本：2.1
 
-状态：Draft
+状态：Stable
 
 最后更新：2026-06
 
@@ -148,89 +148,163 @@ Recommendation Result
 
 推荐引擎的数据来源：
 
-## 收藏
+## 行为类型（v2.1）
 
-behavior_type
+| behavior_type | 语义        | 权重贡献    |
+| ------------- | --------- | ------- |
+| view          | 浏览        | 弱正向     |
+| favorite      | 收藏        | 强正向     |
+| unfavorite    | 取消收藏      | 弱负向     |
+| rate          | 评分        | 按 score |
+| hide          | 不感兴趣      | 强负向     |
+| unhide        | 取消不感兴趣    | 弱正向     |
+
+权重计算在 v2.1 中已不再使用单 `score` 字段（v2.0 的方式已废弃）——
+
+v2.0（旧）：
 
 ```text
-favorite
+favorite   score=5
+rating     score=5
+view       score=1
+hidden     score=-5
 ```
 
-权重：
+v2.1（新）：行为类型 + JSON value 共同决定权重，由推荐引擎在运行时计算。
 
-```text
-+5
+---
+
+## 行为事件模型（v2.1）
+
+每条 `media_behavior` 记录是一次完整行为快照，符合事件流（Event）标准做法。
+
+字段：
+
+* `behavior_type`：行为类型（view / favorite / rate / hide / ...）
+* `behavior_value`：JSON 字符串，携带行为具体数据
+* `behavior_source`：行为来源（manual / search / recommendation / home_feed）
+* `created_at`：发生时间
+
+---
+
+## 行为值示例
+
+不同行为类型的 `behavior_value` 结构：
+
+### 收藏 / 取消收藏 / 不感兴趣 / 取消不感兴趣
+
+```json
+{}
+```
+
+或携带额外上下文（推荐原因 / 来源）：
+
+```json
+{
+  "reason": "similar-tag"
+}
+```
+
+### 评分
+
+```json
+{
+  "rating": 4.5
+}
+```
+
+支持 0.5 步进（如 3.5、4.5）。
+
+### 浏览
+
+```json
+{
+  "duration_sec": 3600
+}
+```
+
+或仅记录访问：
+
+```json
+{}
+```
+
+### 搜索点击
+
+```json
+{
+  "position": 3,
+  "keyword": "三体"
+}
 ```
 
 ---
 
-## 评分
+## 为什么用 JSON 而非拆分多列
 
-```text
-rating
-```
+v2.0 方案是单 `score` 字段表达所有行为——6 种行为共用一列，归因不可逆（收藏 5 分 = 评分 5 分）。
 
-权重：
+v2.1 改用 JSON 原因：
 
-```text
-1~5
-```
-
----
-
-## 浏览
-
-```text
-view
-```
-
-权重：
-
-```text
-+1
-```
+* 字段组合不可枚举（不同行为携带不同上下文）
+* 未来扩展无需改 schema（如新增"分享""下载"等行为）
+* 行为流符合 Event Sourcing 范式
+* Go 端用 `encoding/json` 反序列化，业务层做结构体映射
 
 ---
 
-## 点击
+## 状态-历史 双轨
+
+推荐引擎读取两类数据：
+
+### 当前状态（来自 media 表）
 
 ```text
-click
+favorite         # 当前是否收藏
+favorite_at      # 收藏时间
+rating           # 当前评分
+rating_at        # 评分时间
+hidden           # 当前是否隐藏
+view_count       # 浏览次数
+last_viewed_at   # 最近浏览时间
 ```
 
-权重：
+用途：快速判断"用户对该资源的态度"，避免每次都聚合行为流水。
+
+### 行为历史（来自 media_behavior 表）
 
 ```text
-+1
+view         浏览次数
+favorite     收藏时间线
+rate         评分变化（重评）
+hide         不感兴趣时间
 ```
+
+用途：时序分析（最近 7 天行为 / 评分变化趋势 / 浏览频次）。
 
 ---
 
-## 不感兴趣
+## 权重计算（v2.1 推荐）
+
+推荐引擎按行为类型分别计算权重，公式示意：
 
 ```text
-hidden
+Score = Σ (behavior_weight × time_decay × type_weight)
+
+behavior_weight:
+  favorite  = +50
+  rate ≥ 4  = +30
+  rate 3    = +10
+  rate ≤ 2  = -10
+  view      = +1
+  hide      = -100
+  search_click = +5
+
+time_decay:
+  e^(-Δdays / 30)   # 30 天半衰期
 ```
 
-权重：
-
-```text
--5
-```
-
----
-
-## 搜索点击
-
-```text
-search_click
-```
-
-权重：
-
-```text
-+2
-```
+权重公式由 Service 层实现，DB 只负责存储原始事件。
 
 ---
 

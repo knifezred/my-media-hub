@@ -22,7 +22,6 @@ func (r *SearchRepository) Search(keyword, mediaType string, page, pageSize int)
 	if err != nil {
 		return nil, 0, fmt.Errorf("search index: %w", err)
 	}
-
 	if len(results) == 0 {
 		return []model.Media{}, int64(total), nil
 	}
@@ -40,9 +39,11 @@ func (r *SearchRepository) Search(keyword, mediaType string, page, pageSize int)
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, media_type, title, description, path, hash, size, cover_path, created_at, updated_at
-		FROM media
-		WHERE id IN (%s)`, strings.Join(placeholders, ","))
+		SELECT id, media_type, title, description, path, hash, size, cover_path,
+		status, last_error, metadata_json, metadata_version,
+		favorite, favorite_at, rating, rating_at, hidden, hidden_at,
+		view_count, last_viewed_at, created_at, updated_at
+		FROM media WHERE id IN (%s)`, strings.Join(placeholders, ","))
 
 	rows, err := r.db.Query(query, idArgs...)
 	if err != nil {
@@ -52,11 +53,21 @@ func (r *SearchRepository) Search(keyword, mediaType string, page, pageSize int)
 
 	mediaMap := make(map[int64]model.Media, len(ids))
 	for rows.Next() {
-		var m model.Media
-		if err := rows.Scan(&m.ID, &m.MediaType, &m.Title, &m.Description, &m.Path, &m.Hash, &m.Size, &m.CoverPath, &m.CreatedAt, &m.UpdatedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan media: %w", err)
+		m := &model.Media{}
+		var favoriteAt, ratingAt, hiddenAt, lastViewedAt sql.NullString
+		if err := rows.Scan(
+			&m.ID, &m.MediaType, &m.Title, &m.Description, &m.Path, &m.Hash, &m.Size, &m.CoverPath,
+			&m.Status, &m.LastError, &m.MetadataJSON, &m.MetadataVersion,
+			&m.Favorite, &favoriteAt, &m.Rating, &ratingAt, &m.Hidden, &hiddenAt,
+			&m.ViewCount, &lastViewedAt, &m.CreatedAt, &m.UpdatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan search result: %w", err)
 		}
-		mediaMap[m.ID] = m
+		m.FavoriteAt = parseTime(favoriteAt)
+		m.RatingAt = parseTime(ratingAt)
+		m.HiddenAt = parseTime(hiddenAt)
+		m.LastViewedAt = parseTime(lastViewedAt)
+		mediaMap[m.ID] = *m
 	}
 
 	items := make([]model.Media, 0, len(ids))

@@ -173,10 +173,16 @@ null
   "cover_path": "",
   "size": 0,
 
-  "favorite_count": 0,
+  "favorite": false,
+  "favorite_at": "",
+  "rating": 0.0,
+  "rating_at": "",
+  "hidden": false,
+  "hidden_at": "",
   "view_count": 0,
-  "rating_count": 0,
-  "avg_rating": 0,
+  "last_viewed_at": "",
+  "status": "active",
+  "metadata_json": "{}",
 
   "tags": [],
   "categories": [],
@@ -340,7 +346,8 @@ Request：
 {
   "media_id": 1,
   "behavior_type": "favorite",
-  "score": 5
+  "behavior_value": {},
+  "behavior_source": "manual"
 }
 ```
 
@@ -349,12 +356,44 @@ Request：
 behavior_type：
 
 ```text
-favorite
-rating
 view
-click
-hidden
-search_click
+favorite
+unfavorite
+rate
+hide
+unhide
+```
+
+---
+
+behavior_value（JSON 对象，按行为类型携带不同字段）：
+
+```json
+// 收藏 / 取消收藏
+{}
+
+// 评分
+{"rating": 4.5}
+
+// 评分（带推荐原因）
+{"rating": 5, "reason": "similar-tag"}
+
+// 搜索点击
+{"position": 3, "keyword": "三体"}
+
+// 浏览（带时长）
+{"duration_sec": 3600}
+```
+
+---
+
+behavior_source：
+
+```text
+manual           # 用户主动操作
+search           # 来自搜索结果
+recommendation   # 来自推荐
+home_feed        # 来自首页发现流
 ```
 
 ---

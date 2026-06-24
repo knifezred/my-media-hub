@@ -2,6 +2,7 @@ package service
 
 import (
 	"database/sql"
+	"fmt"
 	"my-media-hub/backend/internal/model"
 	"my-media-hub/backend/internal/repository"
 )
@@ -18,124 +19,89 @@ func NewBehaviorService(db *sql.DB) *BehaviorService {
 	}
 }
 
-func (s *BehaviorService) Record(mediaID int64, behaviorType string, score float64) error {
-	_, err := s.behaviorRepo.Insert(mediaID, behaviorType, score)
-	if err != nil {
+// Record 记录行为 + 同步 media 状态
+func (s *BehaviorService) Record(mediaID int64, behaviorType, behaviorValue, behaviorSource string) error {
+	if _, err := s.behaviorRepo.Insert(mediaID, behaviorType, behaviorValue, behaviorSource); err != nil {
 		return err
 	}
 
+	// 同步 media 当前状态字段（双写：状态+历史）
 	switch behaviorType {
-	case "favorite":
-		count, _ := s.behaviorRepo.GetBehaviorCount(mediaID, "favorite")
-		s.mediaRepo.UpdateStats(mediaID, count, 0, 0, 0)
-	case "rating":
-		count, _ := s.behaviorRepo.GetBehaviorCount(mediaID, "rating")
-		avg, _ := s.behaviorRepo.GetAvgRating(mediaID)
-		s.mediaRepo.UpdateStats(mediaID, 0, 0, count, avg)
-	case "view":
-		total, _ := s.behaviorRepo.GetBehaviorCount(mediaID, "view")
-		s.mediaRepo.UpdateViewStats(mediaID, total)
+	case model.BehaviorFavorite:
+		return s.mediaRepo.SetFavorite(mediaID, true)
+	case model.BehaviorUnfavorite:
+		return s.mediaRepo.SetFavorite(mediaID, false)
+	case model.BehaviorRate:
+		// behaviorValue = {"rating": 4.5}
+		var rating float64
+		if err := parseRatingValue(behaviorValue, &rating); err != nil {
+			return err
+		}
+		return s.mediaRepo.SetRating(mediaID, rating)
+	case model.BehaviorHide:
+		return s.mediaRepo.SetHidden(mediaID, true)
+	case model.BehaviorUnhide:
+		return s.mediaRepo.SetHidden(mediaID, false)
+	case model.BehaviorView:
+		return s.mediaRepo.IncViewCount(mediaID)
 	}
-
 	return nil
 }
 
-func (s *BehaviorService) RemoveBehavior(mediaID int64, behaviorType string) error {
-	return s.behaviorRepo.DeleteByMediaIDAndType(mediaID, behaviorType)
+func (s *BehaviorService) Favorite(mediaID int64) error {
+	return s.Record(mediaID, model.BehaviorFavorite, "{}", model.BehaviorSourceManual)
+}
+
+func (s *BehaviorService) Unfavorite(mediaID int64) error {
+	return s.Record(mediaID, model.BehaviorUnfavorite, "{}", model.BehaviorSourceManual)
+}
+
+func (s *BehaviorService) Rate(mediaID int64, rating float64) error {
+	if rating < 0.5 || rating > 5.0 {
+		return fmt.Errorf("rating out of range [0.5, 5.0]: %v", rating)
+	}
+	value := fmt.Sprintf(`{"rating":%.1f}`, rating)
+	return s.Record(mediaID, model.BehaviorRate, value, model.BehaviorSourceManual)
+}
+
+func (s *BehaviorService) Hide(mediaID int64) error {
+	return s.Record(mediaID, model.BehaviorHide, "{}", model.BehaviorSourceManual)
+}
+
+func (s *BehaviorService) Unhide(mediaID int64) error {
+	return s.Record(mediaID, model.BehaviorUnhide, "{}", model.BehaviorSourceManual)
+}
+
+func (s *BehaviorService) View(mediaID int64) error {
+	return s.Record(mediaID, model.BehaviorView, "{}", model.BehaviorSourceManual)
 }
 
 func (s *BehaviorService) IsFavorited(mediaID int64) (bool, error) {
-	count, err := s.behaviorRepo.GetBehaviorCount(mediaID, "favorite")
-	return count > 0, err
-}
-
-func (s *BehaviorService) GetRating(mediaID int64) (int, error) {
-	score, err := s.behaviorRepo.GetMaxScoreByType(mediaID, "rating")
-	return int(score), err
-}
-
-func (s *BehaviorService) IsViewed(mediaID int64) (bool, error) {
-	count, err := s.behaviorRepo.GetBehaviorCount(mediaID, "view")
-	return count > 0, err
+	m, err := s.mediaRepo.GetByID(mediaID)
+	if err != nil || m == nil {
+		return false, err
+	}
+	return m.Favorite, nil
 }
 
 func (s *BehaviorService) IsHidden(mediaID int64) (bool, error) {
-	count, err := s.behaviorRepo.GetBehaviorCount(mediaID, "hidden")
-	return count > 0, err
-}
-
-func (s *BehaviorService) ListFavorites(req model.FavoritePageRequest) (*model.PageResponse, error) {
-	items, total, err := s.behaviorRepo.ListByType("favorite", req.Page, req.PageSize)
-	if err != nil {
-		return nil, err
+	m, err := s.mediaRepo.GetByID(mediaID)
+	if err != nil || m == nil {
+		return false, err
 	}
-	page := req.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := req.PageSize
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
-	}
-	return &model.PageResponse{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
-}
-
-func (s *BehaviorService) ListViewed(page, pageSize int) (*model.PageResponse, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
-	}
-	items, total, err := s.behaviorRepo.ListByType("view", page, pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return &model.PageResponse{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+	return m.Hidden, nil
 }
 
 func (s *BehaviorService) GetStatistics() (*model.BehaviorStatistics, error) {
-	return s.behaviorRepo.GetBehaviorStatistics()
+	return s.behaviorRepo.Statistics()
 }
 
-func (s *BehaviorService) ListFavoritesAsMedia(page, pageSize int) (*model.PageResponse, error) {
-	if page < 1 {
-		page = 1
+// parseRatingValue 从 {"rating":4.5} 中提取评分值
+func parseRatingValue(jsonStr string, rating *float64) error {
+	var r float64
+	if _, err := fmt.Sscanf(jsonStr, `{"rating":%f}`, &r); err != nil {
+		return fmt.Errorf("parse rating value: %w", err)
 	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
-	}
-	items, total, err := s.behaviorRepo.ListMediaByType("favorite", page, pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return &model.PageResponse{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
-}
-
-func (s *BehaviorService) ListViewedAsMedia(page, pageSize int) (*model.PageResponse, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
-	}
-	items, total, err := s.behaviorRepo.ListMediaByType("view", page, pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return &model.PageResponse{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
-}
-
-func (s *BehaviorService) ListHiddenAsMedia(page, pageSize int) (*model.PageResponse, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
-	}
-	items, total, err := s.behaviorRepo.ListMediaByType("hidden", page, pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return &model.PageResponse{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+	*rating = r
+	return nil
 }

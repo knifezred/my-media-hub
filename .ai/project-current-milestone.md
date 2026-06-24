@@ -16,11 +16,14 @@ AI agents SHOULD update this file after completing implementation tasks.
 
 Milestone 1 + Milestone 2: 媒体库基础能力 + 用户行为系统
 
+**变更任务**：ERD v2.0 → v2.1 升级（Phase 10）+ 行为表 score 字段重构（Phase 11）
+
 ---
 
 # 来源
 
 docs/Roadmap.md
+docs/ERD.md v2.1
 
 说明：
 
@@ -30,7 +33,8 @@ docs/Roadmap.md
 
 # 状态
 
-已完成
+M1+M2 主任务已完成
+v2.1 升级变更任务待执行（Phase 10 / 11）
 
 ---
 
@@ -41,6 +45,10 @@ docs/Roadmap.md
 # M2 交付标准
 
 能够完整记录用户行为（收藏 / 评分 / 已看 / 不感兴趣 / 搜索历史）。
+
+# v2.1 升级交付标准
+
+完成 Phase 10 + Phase 11 所有任务，schema 与 v2.1 文档完全对齐。
 
 ---
 
@@ -69,6 +77,19 @@ docs/Roadmap.md
 - [x] 前端历史页（浏览历史 + 搜索历史）
 - [x] 媒体详情页用户操作（收藏 / 评分 / 已看 / 不感兴趣）
 
+# v2.1 升级清单
+
+详见 `.ai/project-task-breakdown.md` Phase 10 / 11
+
+- [x] media.last_error 字段落地
+- [x] media.rating INTEGER → REAL
+- [x] media_content 复合主键 (media_id, content_type)
+- [x] media.status 状态机落地
+- [x] tag UNIQUE(name_norm) 约束
+- [x] scanner_index.media_id 允许 NULL
+- [x] media_behavior.behavior_value 文档化 JSON
+- [x] 行为表 score 字段废弃（迁移到 behavior_value JSON）
+
 # M9（辅助保留）
 
 - [x] Search Strategy 接口定义
@@ -84,17 +105,19 @@ docs/Roadmap.md
 | Module | Status |
 |--------|--------|
 | 项目骨架 | 已完成 |
-| 数据库 Schema | 已完成（M1+M2 表 + FTS5） |
+| 数据库 Schema (M1+M2) | 已完成 |
+| **数据库 Schema (v2.1 升级)** | **已完成** |
 | Media Repository | 已完成 |
 | Media Service | 已完成 |
 | Media API | 已完成 |
 | Tag Repository | 已完成 |
 | Tag API | 已完成（含 GetTagByID） |
 | Category Repository | 已完成 |
-| Scanner Repository | 已完成 |
-| Scanner Service | 已完成 |
+| Scanner Repository | 已完成（scanner_index 表） |
+| Scanner Service | 已完成（增量扫描缓存） |
 | Scanner API | 已完成 |
-| User Behavior | 已完成（统一 behavior 表 + 旧路径兼容） |
+| User Behavior (M2) | 已完成（统一 behavior 表 + 旧路径兼容） |
+| **User Behavior (v2.1 JSON 化)** | **已完成** |
 | Search History | 已完成 |
 | Search Strategy | 已完成 |
 | LIKE / FTS5 | 已完成 |
@@ -102,11 +125,13 @@ docs/Roadmap.md
 | 前端 - 媒体库 | 已完成 |
 | 前端 - 搜索 | 已完成 |
 | 前端 - 媒体详情 | 已完成 |
-| 前端 - 收藏页 | 待适配 |
-| 前端 - 历史页 | 待适配 |
+| 前端 - 收藏页 | 已完成 |
+| 前端 - 历史页 | 已完成 |
 
 ---
 
 # Next Actions
 
-1. 前端适配（收藏页 / 历史页 / 媒体详情 behavior 统一调用）
+1. **M3 推荐引擎开发启动**（v2.1 schema 已就绪）
+2. 前端适配（新字段 favorite/favorited_at/rating/rating_at/hidden/hidden_at/view_count/last_viewed_at）
+3. API 兼容期维护（旧字段 mapping）

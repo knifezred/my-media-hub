@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type scanTask struct {
@@ -42,7 +43,6 @@ func (s *ScannerService) Start(dirs []string) error {
 	if len(dirs) == 0 {
 		return fmt.Errorf("no scan directories configured")
 	}
-
 	currentScan.mu.Lock()
 	if currentScan.running {
 		currentScan.mu.Unlock()
@@ -54,19 +54,16 @@ func (s *ScannerService) Start(dirs []string) error {
 	currentScan.mu.Unlock()
 
 	go s.run(dirs)
-
 	return nil
 }
 
 func (s *ScannerService) Status() model.ScannerStatus {
 	currentScan.mu.Lock()
 	defer currentScan.mu.Unlock()
-
 	progress := 0.0
 	if currentScan.total > 0 {
 		progress = float64(currentScan.processed) / float64(currentScan.total) * 100
 	}
-
 	return model.ScannerStatus{
 		Running:   currentScan.running,
 		Processed: currentScan.processed,
@@ -78,6 +75,7 @@ func (s *ScannerService) Status() model.ScannerStatus {
 type fileEntry struct {
 	path string
 	size int64
+	mod  time.Time
 }
 
 func (s *ScannerService) run(dirs []string) {
@@ -100,7 +98,11 @@ func (s *ScannerService) run(dirs []string) {
 			if err != nil {
 				return nil
 			}
-			allFiles = append(allFiles, fileEntry{path: path, size: info.Size()})
+			allFiles = append(allFiles, fileEntry{
+				path: path,
+				size: info.Size(),
+				mod:  info.ModTime(),
+			})
 			return nil
 		})
 	}
@@ -110,9 +112,7 @@ func (s *ScannerService) run(dirs []string) {
 	currentScan.mu.Unlock()
 
 	for _, f := range allFiles {
-		if err := s.processFile(f); err != nil {
-		}
-
+		s.processFile(f)
 		currentScan.mu.Lock()
 		currentScan.processed++
 		currentScan.mu.Unlock()
@@ -126,23 +126,40 @@ func (s *ScannerService) processFile(f fileEntry) error {
 		return nil
 	}
 
-	title := extractTitle(f.path)
+	// 先查 scanner_index：已存在且文件没变→跳过
+	si, err := s.scannerRepo.GetByPath(f.path)
+	if err != nil {
+		return err
+	}
+	modStr := f.mod.UTC().Format(time.RFC3339Nano)
+	if si != nil {
+		if si.FileSize == f.size && si.ModifiedTime.Equal(f.mod) && si.FileHash != "" {
+			return nil // 无变化，跳过
+		}
+	}
 
+	// 计算 hash
 	hash, err := computeHash(f.path)
 	if err != nil {
-		return fmt.Errorf("compute hash: %w", err)
+		return err
 	}
 
-	exists, err := s.scannerRepo.ExistsByHash(hash)
+	// 查重：hash 是否已存在
+	exists, err := s.mediaRepo.GetByHash(hash)
 	if err != nil {
-		return fmt.Errorf("check hash: %w", err)
+		return err
 	}
-	if exists {
+	if exists != nil {
+		// 已存在，只更新 scanner_index 关联
+		s.scannerRepo.Upsert(f.path, f.size, modStr, hash)
+		s.scannerRepo.LinkMedia(f.path, exists.ID)
 		return nil
 	}
 
+	// 新文件，入库
+	title := extractTitle(f.path)
 	coverPath := ""
-	if mediaType == "image" {
+	if mediaType == model.MediaTypeImage {
 		coverPath = f.path
 	}
 
@@ -153,26 +170,31 @@ func (s *ScannerService) processFile(f fileEntry) error {
 		Hash:      hash,
 		Size:      f.size,
 		CoverPath: coverPath,
+		Status:    model.MediaStatusActive,
 	})
 	if err != nil {
 		return fmt.Errorf("insert media: %w", err)
 	}
 
-	if err := s.index.IndexMedia(uint64(id), title, ""); err != nil {
-		return fmt.Errorf("index media: %w", err)
-	}
+	// 更新 scanner_index
+	s.scannerRepo.Upsert(f.path, f.size, modStr, hash)
+	s.scannerRepo.LinkMedia(f.path, id)
 
+	// 更新 FTS 索引
+	s.index.IndexMedia(uint64(id), title, "")
 	return nil
 }
 
 func detectMediaType(ext string) string {
 	switch ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".ico":
-		return "image"
-	case ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ts", ".mts":
-		return "video"
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".ico", ".avif":
+		return model.MediaTypeImage
+	case ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ts", ".mts", ".m4v":
+		return model.MediaTypeVideo
 	case ".txt", ".md", ".epub", ".mobi", ".azw3", ".fb2":
-		return "novel"
+		return model.MediaTypeNovel
+	case ".mp3", ".flac", ".wav", ".aac", ".ogg", ".wma", ".m4a", ".ape":
+		return model.MediaTypeMusic
 	default:
 		return ""
 	}
@@ -190,11 +212,9 @@ func computeHash(path string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
-
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", err
 	}
-
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }

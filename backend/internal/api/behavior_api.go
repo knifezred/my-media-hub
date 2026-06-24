@@ -11,34 +11,25 @@ import (
 )
 
 type BehaviorAPI struct {
-	behaviorSvc *service.BehaviorService
+	svc *service.BehaviorService
 }
 
-func NewBehaviorAPI(behaviorSvc *service.BehaviorService) *BehaviorAPI {
-	return &BehaviorAPI{behaviorSvc: behaviorSvc}
+func NewBehaviorAPI(svc *service.BehaviorService) *BehaviorAPI {
+	return &BehaviorAPI{svc: svc}
 }
 
 func (h *BehaviorAPI) Register(r *gin.RouterGroup) {
+	// 统一行为 API
 	r.POST("/behavior", h.Record)
 	r.GET("/behavior/statistics", h.Statistics)
 
-	r.GET("/favorites", h.ListFavoritesGet)
-	r.POST("/favorites", h.AddFavorite)
-	r.DELETE("/favorites/:mediaId", h.RemoveFavorite)
-	r.POST("/favorites/page", h.ListFavoritesPage)
-
-	r.GET("/ratings/:mediaId", h.GetRatingForMedia)
-	r.PUT("/ratings/:mediaId", h.RateMedia)
-	r.POST("/ratings", h.Rate)
-
-	r.GET("/history", h.ListHistory)
-	r.POST("/history", h.MarkViewed)
-	r.POST("/viewed", h.AddViewed)
-	r.POST("/viewed/page", h.ListViewedPage)
-
-	r.GET("/hidden", h.ListHiddenGet)
-	r.POST("/hidden", h.AddHidden)
-	r.DELETE("/hidden/:mediaId", h.RemoveHidden)
+	// 便捷端点
+	r.POST("/favorites/:mediaId", h.Favorite)
+	r.DELETE("/favorites/:mediaId", h.Unfavorite)
+	r.PUT("/ratings/:mediaId", h.Rate)
+	r.POST("/views/:mediaId", h.View)
+	r.POST("/hidden/:mediaId", h.Hide)
+	r.DELETE("/hidden/:mediaId", h.Unhide)
 }
 
 func (h *BehaviorAPI) Record(c *gin.Context) {
@@ -47,7 +38,7 @@ func (h *BehaviorAPI) Record(c *gin.Context) {
 		response.Error(c, errorcode.ValidationError)
 		return
 	}
-	if err := h.behaviorSvc.Record(req.MediaID, req.BehaviorType, req.Score); err != nil {
+	if err := h.svc.Record(req.MediaID, req.BehaviorType, req.BehaviorValue, req.BehaviorSource); err != nil {
 		response.Error(c, errorcode.InternalError)
 		return
 	}
@@ -55,7 +46,7 @@ func (h *BehaviorAPI) Record(c *gin.Context) {
 }
 
 func (h *BehaviorAPI) Statistics(c *gin.Context) {
-	stats, err := h.behaviorSvc.GetStatistics()
+	stats, err := h.svc.GetStatistics()
 	if err != nil {
 		response.Error(c, errorcode.InternalError)
 		return
@@ -63,89 +54,26 @@ func (h *BehaviorAPI) Statistics(c *gin.Context) {
 	response.Success(c, stats)
 }
 
-func (h *BehaviorAPI) ListFavoritesGet(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	resp, err := h.behaviorSvc.ListFavoritesAsMedia(page, pageSize)
+func (h *BehaviorAPI) Favorite(c *gin.Context) {
+	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
 	if err != nil {
-		response.Error(c, errorcode.InternalError)
+		response.Error(c, errorcode.ParameterInvalid)
 		return
 	}
-	response.Success(c, resp)
-}
-
-func (h *BehaviorAPI) AddFavorite(c *gin.Context) {
-	var req model.MediaIDRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errorcode.ValidationError)
-		return
-	}
-	if err := h.behaviorSvc.Record(req.MediaID, "favorite", 1); err != nil {
+	if err := h.svc.Favorite(mediaID); err != nil {
 		response.Error(c, errorcode.InternalError)
 		return
 	}
 	response.Success(c, struct{}{})
 }
 
-func (h *BehaviorAPI) RemoveFavorite(c *gin.Context) {
+func (h *BehaviorAPI) Unfavorite(c *gin.Context) {
 	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
 	if err != nil {
 		response.Error(c, errorcode.ParameterInvalid)
 		return
 	}
-	if err := h.behaviorSvc.RemoveBehavior(mediaID, "favorite"); err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, struct{}{})
-}
-
-func (h *BehaviorAPI) ListFavoritesPage(c *gin.Context) {
-	var req model.FavoritePageRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errorcode.ValidationError)
-		return
-	}
-	resp, err := h.behaviorSvc.ListFavoritesAsMedia(req.Page, req.PageSize)
-	if err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, resp)
-}
-
-func (h *BehaviorAPI) GetRatingForMedia(c *gin.Context) {
-	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
-	if err != nil {
-		response.Error(c, errorcode.ParameterInvalid)
-		return
-	}
-	rating, err := h.behaviorSvc.GetRating(mediaID)
-	if err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, gin.H{"rating": rating})
-}
-
-func (h *BehaviorAPI) RateMedia(c *gin.Context) {
-	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
-	if err != nil {
-		response.Error(c, errorcode.ParameterInvalid)
-		return
-	}
-	var body struct {
-		Rating int `json:"rating"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		response.Error(c, errorcode.ValidationError)
-		return
-	}
-	if body.Rating < 1 || body.Rating > 5 {
-		response.Error(c, errorcode.RatingInvalid)
-		return
-	}
-	if err := h.behaviorSvc.Record(mediaID, "rating", float64(body.Rating)); err != nil {
+	if err := h.svc.Unfavorite(mediaID); err != nil {
 		response.Error(c, errorcode.InternalError)
 		return
 	}
@@ -153,104 +81,62 @@ func (h *BehaviorAPI) RateMedia(c *gin.Context) {
 }
 
 func (h *BehaviorAPI) Rate(c *gin.Context) {
-	var req model.RateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errorcode.ValidationError)
-		return
-	}
-	if req.Rating < 1 || req.Rating > 5 {
-		response.Error(c, errorcode.RatingInvalid)
-		return
-	}
-	if err := h.behaviorSvc.Record(req.MediaID, "rating", float64(req.Rating)); err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, struct{}{})
-}
-
-func (h *BehaviorAPI) ListHistory(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	resp, err := h.behaviorSvc.ListViewedAsMedia(page, pageSize)
-	if err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, resp)
-}
-
-func (h *BehaviorAPI) MarkViewed(c *gin.Context) {
-	var req model.MediaIDRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errorcode.ValidationError)
-		return
-	}
-	if err := h.behaviorSvc.Record(req.MediaID, "view", 1); err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, struct{}{})
-}
-
-func (h *BehaviorAPI) AddViewed(c *gin.Context) {
-	var req model.MediaIDRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errorcode.ValidationError)
-		return
-	}
-	if err := h.behaviorSvc.Record(req.MediaID, "view", 1); err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, struct{}{})
-}
-
-func (h *BehaviorAPI) ListViewedPage(c *gin.Context) {
-	var req model.PageRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errorcode.ValidationError)
-		return
-	}
-	resp, err := h.behaviorSvc.ListViewedAsMedia(req.Page, req.PageSize)
-	if err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, resp)
-}
-
-func (h *BehaviorAPI) ListHiddenGet(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	resp, err := h.behaviorSvc.ListHiddenAsMedia(page, pageSize)
-	if err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, resp)
-}
-
-func (h *BehaviorAPI) AddHidden(c *gin.Context) {
-	var req model.MediaIDRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errorcode.ValidationError)
-		return
-	}
-	if err := h.behaviorSvc.Record(req.MediaID, "hidden", 1); err != nil {
-		response.Error(c, errorcode.InternalError)
-		return
-	}
-	response.Success(c, struct{}{})
-}
-
-func (h *BehaviorAPI) RemoveHidden(c *gin.Context) {
 	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
 	if err != nil {
 		response.Error(c, errorcode.ParameterInvalid)
 		return
 	}
-	if err := h.behaviorSvc.RemoveBehavior(mediaID, "hidden"); err != nil {
+	var body struct {
+		Rating float64 `json:"rating"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, errorcode.ValidationError)
+		return
+	}
+	if body.Rating < 0.5 || body.Rating > 5.0 {
+		response.Error(c, errorcode.RatingInvalid)
+		return
+	}
+	if err := h.svc.Rate(mediaID, body.Rating); err != nil {
+		response.Error(c, errorcode.InternalError)
+		return
+	}
+	response.Success(c, struct{}{})
+}
+
+func (h *BehaviorAPI) View(c *gin.Context) {
+	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
+	if err != nil {
+		response.Error(c, errorcode.ParameterInvalid)
+		return
+	}
+	if err := h.svc.View(mediaID); err != nil {
+		response.Error(c, errorcode.InternalError)
+		return
+	}
+	response.Success(c, struct{}{})
+}
+
+func (h *BehaviorAPI) Hide(c *gin.Context) {
+	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
+	if err != nil {
+		response.Error(c, errorcode.ParameterInvalid)
+		return
+	}
+	if err := h.svc.Hide(mediaID); err != nil {
+		response.Error(c, errorcode.InternalError)
+		return
+	}
+	response.Success(c, struct{}{})
+}
+
+func (h *BehaviorAPI) Unhide(c *gin.Context) {
+	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
+	if err != nil {
+		response.Error(c, errorcode.ParameterInvalid)
+		return
+	}
+	if err := h.svc.Unhide(mediaID); err != nil {
 		response.Error(c, errorcode.InternalError)
 		return
 	}
