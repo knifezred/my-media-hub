@@ -173,7 +173,7 @@ func migrate(db *sql.DB) error {
 
 	-- ==================== 全文搜索（FTS5） ====================
 	CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
-		title, description, content='', tokenize='unicode61 remove_diacritic 2'
+		title, description, content='media', content_rowid='id'
 	);
 
 	-- ==================== 触发器 ====================
