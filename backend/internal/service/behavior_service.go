@@ -96,6 +96,59 @@ func (s *BehaviorService) GetStatistics() (*model.BehaviorStatistics, error) {
 	return s.behaviorRepo.Statistics()
 }
 
+func (s *BehaviorService) GetRatingByMediaID(mediaID int64) (float64, error) {
+	m, err := s.mediaRepo.GetByID(mediaID)
+	if err != nil || m == nil {
+		return 0, err
+	}
+	return m.Rating, nil
+}
+
+// ListFavoritesPage 分页查询收藏的媒体列表
+func (s *BehaviorService) ListFavoritesPage(page, pageSize int) (*model.PageResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	items, total, err := s.behaviorRepo.ListMediaByType(model.BehaviorFavorite, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	return &model.PageResponse{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
+// ListHistoryPage 分页查询浏览历史媒体列表
+func (s *BehaviorService) ListHistoryPage(page, pageSize int) (*model.PageResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	items, total, err := s.behaviorRepo.ListMediaByType(model.BehaviorView, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	return &model.PageResponse{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
+// ListHiddenPage 分页查询已隐藏媒体列表
+func (s *BehaviorService) ListHiddenPage(page, pageSize int) (*model.PageResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	items, total, err := s.behaviorRepo.ListMediaByType(model.BehaviorHide, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	return &model.PageResponse{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
 // parseRatingValue 从 {"rating":4.5} 中提取评分值
 func parseRatingValue(jsonStr string, rating *float64) error {
 	var r float64

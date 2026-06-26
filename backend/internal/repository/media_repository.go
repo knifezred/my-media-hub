@@ -19,14 +19,20 @@ const mediaFields = `id, media_type, title, description, path, hash, size, cover
 	favorite, favorite_at, rating, rating_at, hidden, hidden_at,
 	view_count, last_viewed_at, created_at, updated_at`
 
+// 用于 JOIN 查询时消除歧义
+const mediaFieldsPrefixed = `m.id, m.media_type, m.title, m.description, m.path, m.hash, m.size, m.cover_path,
+	m.status, m.last_error, m.metadata_json, m.metadata_version,
+	m.favorite, m.favorite_at, m.rating, m.rating_at, m.hidden, m.hidden_at,
+	m.view_count, m.last_viewed_at, m.created_at, m.updated_at`
+
 func scanMedia(s scanner) (*model.Media, error) {
 	m := &model.Media{}
-	var favoriteAt, ratingAt, hiddenAt, lastViewedAt sql.NullString
+	var favoriteAt, ratingAt, hiddenAt, lastViewedAt, createdAt, updatedAt sql.NullString
 	err := s.Scan(
 		&m.ID, &m.MediaType, &m.Title, &m.Description, &m.Path, &m.Hash, &m.Size, &m.CoverPath,
 		&m.Status, &m.LastError, &m.MetadataJSON, &m.MetadataVersion,
 		&m.Favorite, &favoriteAt, &m.Rating, &ratingAt, &m.Hidden, &hiddenAt,
-		&m.ViewCount, &lastViewedAt, &m.CreatedAt, &m.UpdatedAt,
+		&m.ViewCount, &lastViewedAt, &createdAt, &updatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -38,6 +44,12 @@ func scanMedia(s scanner) (*model.Media, error) {
 	m.RatingAt = parseTime(ratingAt)
 	m.HiddenAt = parseTime(hiddenAt)
 	m.LastViewedAt = parseTime(lastViewedAt)
+	if t := parseTime(createdAt); t != nil {
+		m.CreatedAt = *t
+	}
+	if t := parseTime(updatedAt); t != nil {
+		m.UpdatedAt = *t
+	}
 	return m, nil
 }
 

@@ -1,10 +1,6 @@
-import { post, get } from './client'
+import { get } from './client'
 
 export function rateMedia(mediaId: number, rating: number): Promise<void> {
-  return post('/ratings', { media_id: mediaId, rating })
-}
-
-export function rateMediaPut(mediaId: number, rating: number): Promise<void> {
   return fetch(`/api/v1/ratings/${mediaId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

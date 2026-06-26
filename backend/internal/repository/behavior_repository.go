@@ -119,11 +119,50 @@ func (r *BehaviorRepository) Statistics() (*model.BehaviorStatistics, error) {
 	if err := r.db.QueryRow(`SELECT COUNT(*) FROM media_behavior WHERE behavior_type = ?`, model.BehaviorView).Scan(&stats.ViewCount); err != nil {
 		return nil, err
 	}
-	if err := r.db.QueryRow(`SELECT COUNT(*) FROM media_behavior WHERE behavior_type = ?`, model.BehaviorRate).Scan(&stats.RateCount); err != nil {
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM media_behavior WHERE behavior_type = ?`, model.BehaviorRate).Scan(&stats.RatingCount); err != nil {
 		return nil, err
 	}
-	if err := r.db.QueryRow(`SELECT COUNT(*) FROM media_behavior WHERE behavior_type = ?`, model.BehaviorHide).Scan(&stats.HideCount); err != nil {
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM media_behavior WHERE behavior_type = ?`, model.BehaviorHide).Scan(&stats.HiddenCount); err != nil {
 		return nil, err
 	}
 	return stats, nil
+}
+
+// ListMediaByType 按行为类型分页查询关联媒体列表（JOIN media 表）
+func (r *BehaviorRepository) ListMediaByType(behaviorType string, page, pageSize int) ([]model.Media, int64, error) {
+	const countSQL = `SELECT COUNT(DISTINCT media_id) FROM media_behavior WHERE behavior_type = ?`
+	var total int64
+	if err := r.db.QueryRow(countSQL, behaviorType).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	query := `SELECT ` + mediaFieldsPrefixed + ` FROM media_behavior ub
+		JOIN media m ON m.id = ub.media_id
+		WHERE ub.behavior_type = ?
+		GROUP BY ub.media_id
+		ORDER BY MAX(ub.created_at) DESC LIMIT ? OFFSET ?`
+
+	rows, err := r.db.Query(query, behaviorType, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list media by behavior: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]model.Media, 0)
+	for rows.Next() {
+		m, err := scanMedia(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		items = append(items, *m)
+	}
+	return items, total, nil
 }

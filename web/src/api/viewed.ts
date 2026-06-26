@@ -2,15 +2,11 @@ import type { Media, PaginationData } from '../types'
 import { post, get } from './client'
 
 export function markViewed(mediaId: number): Promise<void> {
-  return post('/viewed', { media_id: mediaId })
-}
-
-export function markHistory(mediaId: number): Promise<void> {
   return post('/history', { media_id: mediaId })
 }
 
 export function fetchViewedPage(params: { page?: number; page_size?: number } = {}): Promise<PaginationData<Media>> {
-  return post('/viewed/page', params)
+  return post('/history/page', params)
 }
 
 export function fetchHistory(params: { page?: number; page_size?: number } = {}): Promise<PaginationData<Media>> {

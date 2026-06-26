@@ -54,8 +54,8 @@ type MediaIDRequest struct {
 type BehaviorStatistics struct {
 	FavoriteCount int64 `json:"favorite_count"`
 	ViewCount     int64 `json:"view_count"`
-	RateCount     int64 `json:"rate_count"`
-	HideCount     int64 `json:"hide_count"`
+	RatingCount   int64 `json:"rating_count"`
+	HiddenCount   int64 `json:"hidden_count"`
 }
 
 type StatsOverview struct {

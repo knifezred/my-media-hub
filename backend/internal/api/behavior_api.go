@@ -19,17 +19,22 @@ func NewBehaviorAPI(svc *service.BehaviorService) *BehaviorAPI {
 }
 
 func (h *BehaviorAPI) Register(r *gin.RouterGroup) {
-	// 统一行为 API
 	r.POST("/behavior", h.Record)
 	r.GET("/behavior/statistics", h.Statistics)
 
-	// 便捷端点
-	r.POST("/favorites/:mediaId", h.Favorite)
+	r.POST("/favorites", h.Favorite)
 	r.DELETE("/favorites/:mediaId", h.Unfavorite)
+	r.POST("/favorites/page", h.ListFavorites)
+
+	r.GET("/ratings/:mediaId", h.GetRating)
 	r.PUT("/ratings/:mediaId", h.Rate)
-	r.POST("/views/:mediaId", h.View)
-	r.POST("/hidden/:mediaId", h.Hide)
+
+	r.POST("/history", h.View)
+	r.POST("/history/page", h.ListHistory)
+
+	r.POST("/hidden", h.Hide)
 	r.DELETE("/hidden/:mediaId", h.Unhide)
+	r.POST("/hidden/page", h.ListHidden)
 }
 
 func (h *BehaviorAPI) Record(c *gin.Context) {
@@ -55,12 +60,12 @@ func (h *BehaviorAPI) Statistics(c *gin.Context) {
 }
 
 func (h *BehaviorAPI) Favorite(c *gin.Context) {
-	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
-	if err != nil {
-		response.Error(c, errorcode.ParameterInvalid)
+	var req model.MediaIDRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errorcode.ValidationError)
 		return
 	}
-	if err := h.svc.Favorite(mediaID); err != nil {
+	if err := h.svc.Favorite(req.MediaID); err != nil {
 		response.Error(c, errorcode.InternalError)
 		return
 	}
@@ -78,6 +83,34 @@ func (h *BehaviorAPI) Unfavorite(c *gin.Context) {
 		return
 	}
 	response.Success(c, struct{}{})
+}
+
+func (h *BehaviorAPI) ListFavorites(c *gin.Context) {
+	var req model.PageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errorcode.ValidationError)
+		return
+	}
+	resp, err := h.svc.ListFavoritesPage(req.Page, req.PageSize)
+	if err != nil {
+		response.Error(c, errorcode.InternalError)
+		return
+	}
+	response.Success(c, resp)
+}
+
+func (h *BehaviorAPI) GetRating(c *gin.Context) {
+	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
+	if err != nil {
+		response.Error(c, errorcode.ParameterInvalid)
+		return
+	}
+	rating, err := h.svc.GetRatingByMediaID(mediaID)
+	if err != nil {
+		response.Error(c, errorcode.InternalError)
+		return
+	}
+	response.Success(c, gin.H{"rating": rating})
 }
 
 func (h *BehaviorAPI) Rate(c *gin.Context) {
@@ -105,25 +138,39 @@ func (h *BehaviorAPI) Rate(c *gin.Context) {
 }
 
 func (h *BehaviorAPI) View(c *gin.Context) {
-	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
-	if err != nil {
-		response.Error(c, errorcode.ParameterInvalid)
+	var req model.MediaIDRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errorcode.ValidationError)
 		return
 	}
-	if err := h.svc.View(mediaID); err != nil {
+	if err := h.svc.View(req.MediaID); err != nil {
 		response.Error(c, errorcode.InternalError)
 		return
 	}
 	response.Success(c, struct{}{})
 }
 
-func (h *BehaviorAPI) Hide(c *gin.Context) {
-	mediaID, err := strconv.ParseInt(c.Param("mediaId"), 10, 64)
-	if err != nil {
-		response.Error(c, errorcode.ParameterInvalid)
+func (h *BehaviorAPI) ListHistory(c *gin.Context) {
+	var req model.PageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errorcode.ValidationError)
 		return
 	}
-	if err := h.svc.Hide(mediaID); err != nil {
+	resp, err := h.svc.ListHistoryPage(req.Page, req.PageSize)
+	if err != nil {
+		response.Error(c, errorcode.InternalError)
+		return
+	}
+	response.Success(c, resp)
+}
+
+func (h *BehaviorAPI) Hide(c *gin.Context) {
+	var req model.MediaIDRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errorcode.ValidationError)
+		return
+	}
+	if err := h.svc.Hide(req.MediaID); err != nil {
 		response.Error(c, errorcode.InternalError)
 		return
 	}
@@ -141,4 +188,18 @@ func (h *BehaviorAPI) Unhide(c *gin.Context) {
 		return
 	}
 	response.Success(c, struct{}{})
+}
+
+func (h *BehaviorAPI) ListHidden(c *gin.Context) {
+	var req model.PageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errorcode.ValidationError)
+		return
+	}
+	resp, err := h.svc.ListHiddenPage(req.Page, req.PageSize)
+	if err != nil {
+		response.Error(c, errorcode.InternalError)
+		return
+	}
+	response.Success(c, resp)
 }
